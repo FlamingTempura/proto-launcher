@@ -8,7 +8,7 @@ const launcher = require('./lib/launcher');
 const LOCKFILE = path.resolve(os.homedir(), '.launcher-lock');
 
 lockSingleInstance(LOCKFILE, () => { // if a second instance tried to run, show the launcher
-	console.log('lockfile changed, showing launcher');
+	console.log('launcher: lockfile changed, showing launcher');
 	launcher.show();
 });
 

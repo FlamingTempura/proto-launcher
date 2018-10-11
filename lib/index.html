@@ -98,10 +98,9 @@
 		});
 	};
 
-	const close = () => {
+	const reset = () => {
 		$q.value = '';
 		update();
-		ipcRenderer.send('hide');
 	};
 
 	const emph = (text, query) => {
@@ -120,11 +119,12 @@
 
 		if (e.keyCode === 13) { // Enter
 			ipcRenderer.send('open-program', results[selectedIndex].id);
-			close();
+			reset();
 		}
 
 		if (e.keyCode === 27) { // Escape
-			close();
+			ipcRenderer.send('hide');
+			reset();
 		}
 	});
 
