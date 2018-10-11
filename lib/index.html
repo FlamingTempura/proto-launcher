@@ -66,7 +66,7 @@
 
 	let selectedIndex, results;
 
-	const log = (...data) => ipcRenderer.send('log', data)
+	const log = (...data) => ipcRenderer.send('log', data);
 
 	const update = () => {
 		let q = $q.value;
@@ -90,11 +90,11 @@
 
 		highlight();
 		ipcRenderer.send('resize', [$container.offsetWidth, $container.offsetHeight]);
-	}
+	};
 
 	const highlight = () => {
 		$$('#results > div').forEach(($el, i) => {
-			$el.classList.toggle('highlight', i == selectedIndex);
+			$el.classList.toggle('highlight', i === selectedIndex);
 		});
 	};
 
@@ -102,7 +102,7 @@
 		$q.value = '';
 		update();
 		ipcRenderer.send('hide');
-	}
+	};
 
 	const emph = (text, query) => {
 		return text.replace(new RegExp(`(${query})`, 'i'), '<strong>$1</strong>');
@@ -126,7 +126,7 @@
 		if (e.keyCode === 27) { // Escape
 			close();
 		}
-	})
+	});
 
 	$q.focus();
 	update();

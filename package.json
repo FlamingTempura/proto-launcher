@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "electron . --enable-transparent-visuals --disable-gpu --enable-logging",
-    "build": "electron-packager . --out bin --ignore bin --extra-resource index.html --overwrite",
+    "build": "electron-packager . --out bin --ignore bin --overwrite",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
