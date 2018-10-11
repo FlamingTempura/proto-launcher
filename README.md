@@ -1,38 +1,25 @@
-## Launcher
+# Proto-Launcher
 
-Basic launcher build on Electron.js.
+Basic application launcher for Linux built on NodeJS and Electron.
 
-To run:
+## Installation
 
-```
-./bin/launcher
-```
-
-To run as a background service to ensure launcher opens faster:
-
-```
-./bin/launcher --service
-```
-
-Then to open the launcher:
-```
-./bin/launcher
-```
-
-### Development
+Node and NPM must be installed. Then, from the repository root, run the following:
 
 ```
 npm install
 ```
 
-To run
+## Documentation
+
+To run:
 
 ```
-npm start
+launcher
 ```
 
-To build:
+The launcher will start faster if the background service is running. This can be started as follows:
 
 ```
-npm run build
+launcher --service
 ```
