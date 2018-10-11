@@ -3,6 +3,8 @@
 # launcher. This script is run before running the main electron script because
 # electron is slow to load.
 
+cd "$(dirname "$0")"
+
 LOCKFILE=~/.launcher-lock;
 
 if [ -f $LOCKFILE ]; then

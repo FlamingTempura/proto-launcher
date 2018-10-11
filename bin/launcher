@@ -1,9 +1,11 @@
-#!/bin/sh
+#!/bin/bash
 
 # This script checks if a launcher process is already running, and if it is,
 # responds with an error code. The existing process will consequently show the
 # launcher. This script is run before running the main electron script because
 # electron is slow to load.
+
+cd "$(dirname "$0")"
 
 LOCKFILE=~/.launcher-lock;
 
