@@ -2,8 +2,8 @@
 
 const os = require('os');
 const path = require('path');
-const lockSingleInstance = require('./lib/lockfile');
-const launcher = require('./lib/launcher');
+const lockSingleInstance = require('./lockfile');
+const launcher = require('./launcher');
 
 const LOCKFILE = path.resolve(os.homedir(), '.launcher-lock');
 

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # This script checks if a launcher process is already running, and if it is,
 # responds with an error code. The existing process will consequently show the
@@ -11,7 +11,7 @@ LOCKFILE=~/.launcher-lock;
 
 if [ -f $LOCKFILE ]; then
 	echo "launcher-lock: lockfile exists, checking if in use."
-	echo "open" > $LOCKFILE 
+	echo "open" > $LOCKFILE
 
 	# quit when "cancel" is seen, but timeout after 1 second
 	timeout 1s bash -c "tail -f $LOCKFILE | sed '/cancel/ q'" > /dev/null
@@ -21,9 +21,9 @@ if [ -f $LOCKFILE ]; then
 		echo "launcher-lock: launcher already running."
 	else
 		echo "launcher-lock: timed out, starting new instance."
-		./launcher-linux-x64/launcher $1
+		../node_modules/electron/dist/electron run.js $1 --enable-logging
 	fi
 else
 	echo "launcher-lock: no lock file, starting new instance."
-	./launcher-linux-x64/launcher $1
+	../node_modules/electron/dist/electron run.js $1 --enable-logging
 fi
