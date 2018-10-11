@@ -1,0 +1,136 @@
+<!DOCTYPE>
+<html>
+<head>
+	<title>Launcher</title>
+	<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline'">
+	<style>
+	* {
+		box-sizing: border-box;
+	}
+	body {
+		margin: 0;
+		overflow: hidden;
+		font-family: 'Ubuntu', sans-serif;
+		font-weight: 400;
+		user-select: none;
+		line-height: 1.5em;
+	}
+	#container {
+		width: 600px;
+	}
+	#q {
+		width: 100%;
+		height: 50px;
+		box-sizing: border-box;
+		border: 2px solid #f8c291;
+		outline: none;
+		background: white;
+		font-size: 34px;
+		line-height: 50px;
+		text-indent: 6px;
+	}
+	#results {
+		width: 100%;
+		border: 2px solid #f8c291;
+		border-top: none;
+		background: white;
+	}
+	#results > div {
+		padding: 6px 6px;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+		overflow: hidden;
+	}
+	#results > div.highlight {
+		background: #f8c291;
+	}
+	#results > div .comment {
+		color: #999;
+		font-size: 13px;
+	}
+	</style>
+</head>
+<body>
+	<div id="container">
+		<input id="q" type="text">
+		<div id="results"></div>
+	</div>
+	<script>
+	const {ipcRenderer} = require('electron');
+	const $ = (query, root = document) => root.querySelector(query);
+	const $$ = (query, root = document) => Array.from(root.querySelectorAll(query));
+	const programs = [/*PROGRAMS*/];
+	const $container = $('#container');
+	const $q = $('#q');
+	const $results = $('#results');
+
+	let selectedIndex, results;
+
+	const log = (...data) => ipcRenderer.send('log', data)
+
+	const update = () => {
+		let q = $q.value;
+		
+		results = !q ? [] : results = [
+				...programs.filter(program => program.querysearch.startsWith(q)), // most relevant results first
+				...programs.filter(program => program.querysearch.includes(q) && !program.querysearch.startsWith(q))
+			].slice(0, 10);
+		selectedIndex = 0;
+
+		$results.innerHTML = results
+			.map(program => `
+				<div>
+					<span class="name">${emph(program.Name, q)}</span>
+					<span class="comment">${emph((program.GenericName || '') + ' ' + (program.Comment || ''), q)}</span>
+				</div>
+				`)
+			.join('');
+
+		$results.style.display = results.length > 0 ? 'block' : 'none';
+
+		highlight();
+		ipcRenderer.send('resize', [$container.offsetWidth, $container.offsetHeight]);
+	}
+
+	const highlight = () => {
+		$$('#results > div').forEach(($el, i) => {
+			$el.classList.toggle('highlight', i == selectedIndex);
+		});
+	};
+
+	const close = () => {
+		$q.value = '';
+		update();
+		ipcRenderer.send('hide');
+	}
+
+	const emph = (text, query) => {
+		return text.replace(new RegExp(`(${query})`, 'i'), '<strong>$1</strong>');
+	};
+
+	$q.addEventListener('input', update);
+
+	$q.addEventListener('keydown', e => {
+		if (e.keyCode === 38 || e.keyCode === 40) { // Up / Down
+			if (e.keyCode === 38 && selectedIndex > 0) { selectedIndex--; }
+			if (e.keyCode === 40 && selectedIndex < results.length - 1) { selectedIndex++; }
+			highlight();
+			e.preventDefault();
+		}
+
+		if (e.keyCode === 13) { // Enter
+			ipcRenderer.send('open-program', results[selectedIndex].id);
+			close();
+		}
+
+		if (e.keyCode === 27) { // Escape
+			close();
+		}
+	})
+
+	$q.focus();
+	update();
+
+	</script>
+</body>
+</html>
