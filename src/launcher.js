@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const { homedir } = require('os');
 const getPrograms = require('./programs');
 const preferences = require('./preferences');
 
@@ -50,7 +51,7 @@ const init = () => {
 		let program = programs.find(a => a.id === id);
 		launcher.hide();
 		console.log(`launcher: running ${program.Exec}`);
-		spawn(program.Exec, [], { shell: true, detached: true }).unref(); // prevent parent from waiting for subprocess to exit
+		spawn(program.Exec, [], { cwd: homedir(), shell: true, detached: true }).unref(); // prevent parent from waiting for subprocess to exit
 		program.count++;
 		preferences.count[program.id] = program.count;
 		preferences.save();
