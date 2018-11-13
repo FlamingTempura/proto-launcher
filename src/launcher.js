@@ -9,11 +9,19 @@ const preferences = require('./preferences');
 
 const AS_SERVICE = process.argv.includes('--service');
 
-let launcher;
+let launcher, programs, prevHTML;
+
+const reload = () => {
+	programs = getPrograms();
+	let html = fs.readFileSync(path.resolve(__dirname, './index.html'), 'utf8').replace('[/*PROGRAMS*/]', JSON.stringify(programs));
+	if (html !== prevHTML) {
+		prevHTML = html;
+		launcher.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
+	}
+};
 
 const init = () => {
 	preferences.load();
-	let programs = getPrograms();
 	let electron = require('electron');
 	let display;
 	electron.app.disableHardwareAcceleration();
@@ -31,9 +39,9 @@ const init = () => {
 			maximizable: false,
 			show: false
 		});
-		let html = fs.readFileSync(path.resolve(__dirname, './index.html'), 'utf8').replace('[/*PROGRAMS*/]', JSON.stringify(programs));
-		launcher.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
 		console.log(AS_SERVICE ? 'launcher: service running' : 'launcher: successfully launched');
+		reload();
+		setInterval(reload, 60000); // periodically refresh the list of apps
 	});
 
 	let exited;
@@ -62,6 +70,7 @@ const init = () => {
 
 	electron.ipcMain.on('resize', (e, [width, height]) => {
 		if (exited) { return; }
+		launcher.setMinimumSize(width - 1, height - 1);
 		launcher.setSize(width - 1, height - 1);
 		launcher.setPosition(Math.round(display.bounds.width / 2 - width / 2), 100);
 		if (!AS_SERVICE) { launcher.show(); }

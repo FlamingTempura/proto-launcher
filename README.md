@@ -23,3 +23,11 @@ The launcher will start faster if the background service is running. This can be
 ```
 launcher --service
 ```
+
+## Debugging/Developing
+
+Run 
+
+```
+npm start
+```
