@@ -69,12 +69,32 @@
 	const log = (...data) => ipcRenderer.send('log', data);
 
 	const update = () => {
-		let q = $q.value;
-		
-		results = !q ? [] : results = [
-				...programs.filter(program => program.querysearch.startsWith(q)), // most relevant results first
-				...programs.filter(program => program.querysearch.includes(q) && !program.querysearch.startsWith(q))
-			].slice(0, 10);
+		let q = ($q.value || '').toLowerCase();
+
+		if (!q) {
+			results = [];
+		} else {
+			// sort results as follows:
+			// - apps whose names begin with the query string appear first
+			// - apps whose names or descriptions contain the query string then appear
+			// - apps which have been opened most frequently should be prioritised
+			results = programs
+				.map(app => {
+					let score = 0;
+					for (let i in app.keywords) {
+						let [keyword, weight] = app.keywords[i];
+						if (keyword.includes(q)) {
+							score = (100 - i) * weight * (keyword.startsWith(q) ? 100 : 1);
+							break;
+						}
+					}
+					let order = `${String(score).padStart(10, '0')}-${String(app.count).padStart(10, '0')}`;
+					return Object.assign({ order }, app);
+				})
+				.sort((a, b) => a.order > b.order ? -1 : a.order < b.order ? 1 : 0)
+				.slice(0, 10);
+		}
+
 		selectedIndex = 0;
 
 		$results.innerHTML = results
@@ -103,9 +123,7 @@
 		update();
 	};
 
-	const emph = (text, query) => {
-		return text.replace(new RegExp(`(${query})`, 'i'), '<strong>$1</strong>');
-	};
+	const emph = (text, query) => text.replace(new RegExp(`(${query})`, 'i'), '<strong>$1</strong>');
 
 	$q.addEventListener('input', update);
 
