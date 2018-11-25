@@ -1,33 +1,23 @@
 # Proto-Launcher
 
-Basic application launcher for Linux built on NodeJS and Electron.
+Minimal application launcher for Linux. Built in C++ with X11.
 
 ## Installation
 
-Node and NPM must be installed. Then, from the repository root, run the following:
-
-```
-npm install
-```
-
-## Documentation
-
-To run:
-
-```
-launcher
+```sh
+make
+make install
 ```
 
-The launcher will start faster if the background service is running. This can be started as follows:
+## Running the launcher
 
 ```
-launcher --service
+proto-launcher
 ```
 
-## Debugging/Developing
 
-Run 
+## Uninstall
 
-```
-npm start
+```sh
+make uninstall
 ```

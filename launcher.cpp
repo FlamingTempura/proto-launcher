@@ -389,7 +389,7 @@ int main () {
 	attributes.background_pixel = WhitePixel(display, screen);
 
 	window = XCreateWindow(display, XRootWindow(display, screen),
-		0, 0, 100, 100,
+		-100, -100, 100, 100,
 		5, depth, InputOutput, visual, CWBackPixel, &attributes);
 	XSelectInput(display, window, ExposureMask | KeyPressMask | FocusChangeMask);
 
