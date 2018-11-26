@@ -421,7 +421,7 @@ int main () {
 	style.bold = XftFontOpenName(display, screen, "Ubuntu,sans-11:bold");
 	style.regularSmall = XftFontOpenName(display, screen, "Ubuntu,sans-10");
 	style.boldSmall = XftFontOpenName(display, screen, "Ubuntu,sans-10:bold");
-	style.large = XftFontOpenName(display, screen, "Ubuntu,sans-20");
+	style.large = XftFontOpenName(display, screen, "Ubuntu,sans-20:light");
 
 	xftdraw = XftDrawCreate(display, window, visual, colormap);
 
