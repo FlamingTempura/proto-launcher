@@ -1,4 +1,4 @@
-//#include <iostream> // for log output
+#include <iostream> // for log output
 #include <unistd.h> // starting applications
 #include <fstream> // for input file stream
 #include <string> // string type
@@ -284,10 +284,18 @@ void launch (Application *app) {
 		vector<char*> args;
 		string arg;
 		while (getline(ss, arg, ' ')) {
-			args.push_back(const_cast<char*>(arg.c_str()));
+			//std::cout << "~:" << arg << "\n";
+			if (arg == "%u") {
+				args.push_back(const_cast<char *>(HOME_DIR));
+			} else {
+				string *a = new string(arg);
+				args.push_back(const_cast<char *>(a->c_str()));
+			}
 		}
+		//std::cout << "0:" << args[0] << "\n";
 		args.push_back(NULL);
-		execvp(args[0], &args[1]);
+		char **command = &args[0];
+		execvp(command[0], command);
 	} else {
 		app->count++;
 		writeConfig();
