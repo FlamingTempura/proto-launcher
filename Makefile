@@ -20,7 +20,7 @@ proto-launcher : launcher.cpp
 
 .PHONY         : clean
 clean          :
-	rm proto-launcher
+	rm -f proto-launcher
 
 .PHONY         : install
 install        : all
