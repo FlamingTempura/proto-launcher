@@ -61,7 +61,6 @@ GC gc;
 string query = "";
 int selected = 0;
 int cursor = 0;
-int cursorX;
 bool cursorVisible = false;
 vector<Application> applications;
 XftDraw *xftdraw;
@@ -83,8 +82,11 @@ bool compareByScore(const Result &a, const Result &b) {
 	return a.score > b.score;
 }
 
-void renderText(int *x, const int y, const string &text, XftFont *font, Color color) {
+void renderText(int *x, const int y, string text, XftFont *font, Color color) {
 	XftDrawString8(xftdraw, &color.xft, font, *x, y, (XftChar8 *) text.c_str(), text.length());
+	if (text.back() == ' ') { // XftTextExtents appears to not count whitespace at the end of a string, so move it to the beginning
+		text = " " + text;
+	}
 	XGlyphInfo extents;
 	XftTextExtents8(display, font, (FcChar8 *) text.c_str(), text.length(), &extents);
 	*x += extents.width;
@@ -114,32 +116,35 @@ void search () {
 			}
 		}
 		sort(results.begin(), results.end(), compareByScore);
+		if (results.size() > 10) {
+			results.resize(10); // limit to 10 results
+		}
 	}
 }
 
 auto lastBlink = std::chrono::system_clock::now();
-void toggleCursor (const bool show) {
+void renderTextInput (const bool showCursor) {
 	lastBlink = std::chrono::system_clock::now();
-	XSetForeground(display, gc, show ? style.black.x : style.white.x);
+	int tx = 14;
+	int ty = 0.66 * ROW_HEIGHT * 1.25;
+	int cursorX = 14;
+	renderText(&cursorX, ty, query.substr(0, cursor), style.large, style.white); // invisible text just to figure out cursor position
+	XSetForeground(display, gc, showCursor ? style.black.x : style.white.x);
 	XFillRectangle(display, window, gc, cursorX, ROW_HEIGHT * 1.25 / 4, 3, ROW_HEIGHT * 1.25 / 2);
-	cursorVisible = show;
+	renderText(&tx, ty, query, style.large, style.black);
+	cursorVisible = showCursor;
 }
 
 void cursorBlink () {
-	if (cursorX > 0) {
-		auto now = std::chrono::system_clock::now();
-		std::chrono::duration<double> delta = now - lastBlink;
-		if (delta > (std::chrono::milliseconds) 700) { // seconds
-			toggleCursor(!cursorVisible);
-		}
+	auto now = std::chrono::system_clock::now();
+	std::chrono::duration<double> delta = now - lastBlink;
+	if (delta > (std::chrono::milliseconds) 700) { // seconds
+		renderTextInput(!cursorVisible);
 	}
 }
 
 void render () {
 	int resultCount = results.size();
-	if (resultCount > 10) {
-		resultCount = 10;
-	}
 	int screenWidth = DisplayWidth(display, screen);
 	int width = screenWidth / 3.4;
 	int x = screenWidth / 2 - width / 2;
@@ -148,12 +153,8 @@ void render () {
 	XMoveResizeWindow(display, window, x, 200, width, height);
 
 	XClearWindow(display, window);
-	cursorX = 14;
-	int ty = 0.66 * ROW_HEIGHT * 1.25;
-	renderText(&cursorX, ty, query.substr(0, cursor), style.large, style.white); // invisible text just to figure out cursor position
-	toggleCursor(true);
-	int tx = 14;
-	renderText(&tx, ty, query, style.large, style.black);
+	
+	renderTextInput(true);
 	XSetForeground(display, gc, style.highlight.x);
 	XSetLineAttributes(display, gc, LINE_WIDTH, LineSolid, CapButt, JoinRound);
 	XDrawRectangle(display, window, gc, 0, 0, width - 1, ROW_HEIGHT * 1.25);
@@ -319,6 +320,7 @@ void onKeyPress (XEvent &event) {
 
 		case XK_Up:
 			selected--;
+			std::cout << "0:" << selected << "\n";
 			if (selected < 0) {
 				selected = results.size() - 1;
 			}
