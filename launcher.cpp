@@ -286,9 +286,7 @@ void launch (Application *app) {
 		string arg;
 		while (getline(ss, arg, ' ')) {
 			//std::cout << "~:" << arg << "\n";
-			if (arg == "%u") {
-				args.push_back(const_cast<char *>(HOME_DIR));
-			} else {
+			if (arg.find('%') != 0) {
 				string *a = new string(arg);
 				args.push_back(const_cast<char *>(a->c_str()));
 			}
