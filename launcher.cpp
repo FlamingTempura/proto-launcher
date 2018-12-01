@@ -39,21 +39,26 @@ struct Color {
 
 struct Style {
 	Color title, comment, background, highlight, match;
-	XftFont *regular, *bold, *regularSmall, *boldSmall, *large;
+	XftFont *regular, *bold, *smallRegular, *smallBold, *large;
 };
 
-const    int ROW_HEIGHT         = 72;
-const    int LINE_WIDTH         = 6;
-const string DEFAULT_BACKGROUND = "#ffffff";
-const string DEFAULT_HIGHLIGHT  = "#f8c291";
-const string DEFAULT_TITLE      = "#111111";
-const string DEFAULT_COMMENT    = "#999999";
-const string DEFAULT_MATCH      = "#111111";
-const string HOME_DIR           = getenv("HOME")            != NULL ? getenv("HOME")            : getpwuid(getuid())->pw_dir;
-const string CONFIG_DIR         = getenv("XDG_CONFIG_HOME") != NULL ? getenv("XDG_CONFIG_HOME") : HOME_DIR + "/.config";
-const string DATA_DIR           = getenv("XDG_DATA_HOME")   != NULL ? getenv("XDG_DATA_HOME")   : HOME_DIR + "/.local/share";
-const string CONFIG             = CONFIG_DIR + "/launcher.conf";
-const string APP_DIRS[]         = { "/usr/share/applications", "/usr/local/share/applications", DATA_DIR + "/applications" };
+const    int ROW_HEIGHT    = 72;
+const    int LINE_WIDTH    = 6;
+const string BACKGROUND    = "#ffffff";
+const string HIGHLIGHT     = "#f8c291";
+const string TITLE         = "#111111";
+const string COMMENT       = "#999999";
+const string MATCH         = "#111111";
+const string REGULAR       = "Ubuntu,sans-11";
+const string BOLD          = "Ubuntu,sans-11:bold";
+const string SMALL_REGULAR = "Ubuntu,sans-10";
+const string SMALL_BOLD    = "Ubuntu,sans-10:bold";
+const string LARGE         = "Ubuntu,sans-20:light";
+const string HOME_DIR      = getenv("HOME")            != NULL ? getenv("HOME")            : getpwuid(getuid())->pw_dir;
+const string CONFIG_DIR    = getenv("XDG_CONFIG_HOME") != NULL ? getenv("XDG_CONFIG_HOME") : HOME_DIR + "/.config";
+const string DATA_DIR      = getenv("XDG_DATA_HOME")   != NULL ? getenv("XDG_DATA_HOME")   : HOME_DIR + "/.local/share";
+const string CONFIG        = CONFIG_DIR + "/launcher.conf";
+const string APP_DIRS[]    = { "/usr/share/applications", "/usr/local/share/applications", DATA_DIR + "/applications" };
 
 Display *display;
 int screen;
@@ -67,11 +72,16 @@ bool cursorVisible = false;
 vector<Application> applications;
 XftDraw *xftdraw;
 vector<Result> results;
-string backgroundColor = DEFAULT_BACKGROUND;
-string highlightColor = DEFAULT_HIGHLIGHT;
-string titleColor = DEFAULT_TITLE;
-string commentColor = DEFAULT_COMMENT;
-string matchColor = DEFAULT_MATCH;
+string backgroundColor = BACKGROUND;
+string highlightColor = HIGHLIGHT;
+string titleColor = TITLE;
+string commentColor = COMMENT;
+string matchColor = MATCH;
+string regularFont = REGULAR;
+string boldFont = BOLD;
+string smallRegularFont = SMALL_REGULAR;
+string smallBoldFont = SMALL_BOLD;
+string largeFont = LARGE;
 
 char lowercase (const char &ch) {
 	return ch <= 'Z' && ch >= 'A' ? ch - ('Z' - 'z') : ch;
@@ -190,14 +200,14 @@ void render () {
 		x += 8;
 		int commenti = lowercase(result.app->comment).find(lowercase(query));
 		if (commenti == string::npos) {
-			renderText(&x, y, result.app->comment.c_str(), style.regularSmall, style.comment);
+			renderText(&x, y, result.app->comment.c_str(), style.smallRegular, style.comment);
 		} else {
 			string str = result.app->comment.substr(0, commenti);
-			renderText(&x, y, str.c_str(), style.regularSmall, style.comment);
+			renderText(&x, y, str.c_str(), style.smallRegular, style.comment);
 			str = result.app->comment.substr(commenti, query.length());
-			renderText(&x, y, str.c_str(), style.boldSmall, style.comment);
+			renderText(&x, y, str.c_str(), style.smallBold, style.comment);
 			str = result.app->comment.substr(commenti + query.length());
-			renderText(&x, y, str.c_str(), style.regularSmall, style.comment);
+			renderText(&x, y, str.c_str(), style.smallRegular, style.comment);
 		}
 	}
 }
@@ -211,20 +221,21 @@ void readConfig () {
 			int i = line.find("=");
 			if (i > 0) {
 				string key = line.substr(0, i);
-				if (key == "title") {
-					titleColor = line.substr(i + 1);
-				} else if (key == "comment") {
-					commentColor = line.substr(i + 1);
-				} else if (key == "background") {
-					backgroundColor = line.substr(i + 1);
-				} else if (key == "highlight") {
-					highlightColor = line.substr(i + 1);
-				} else if (key == "match") {
-					matchColor = line.substr(i + 1);
-				} else {
+				string val = line.substr(i + 1);
+				if (key == "title")         { titleColor = val; }       else
+				if (key == "comment")       { commentColor = val; }     else
+				if (key == "background")    { backgroundColor = val; }  else
+				if (key == "highlight")     { highlightColor = val; }   else
+				if (key == "match")         { matchColor = val; }       else
+				if (key == "regular")       { regularFont = val; }      else
+				if (key == "bold")          { boldFont = val; }         else
+				if (key == "small-regular") { smallRegularFont = val; } else
+				if (key == "small-bold")    { smallBoldFont = val; }    else
+				if (key == "large")         { largeFont = val; }
+				else {
 					for (Application &app : applications) {
 						if (app.id == key) {
-							app.count = stoi(line.substr(i + 1));
+							app.count = stoi(val);
 							break;
 						}
 					}
@@ -238,21 +249,16 @@ void writeConfig () {
 	ofstream outfile;
 	outfile.open(CONFIG);
 	outfile << "[Style]\n";
-	if (titleColor != DEFAULT_TITLE) {
-		outfile << "title=" << titleColor << "\n";
-	}
-	if (commentColor != DEFAULT_COMMENT) {
-		outfile << "comment=" << commentColor << "\n";
-	}
-	if (matchColor != DEFAULT_MATCH) {
-		outfile << "match=" << matchColor << "\n";
-	}
-	if (backgroundColor != DEFAULT_BACKGROUND) {
-		outfile << "background=" << backgroundColor << "\n";
-	}
-	if (highlightColor != DEFAULT_HIGHLIGHT) {
-		outfile << "highlight=" << highlightColor << "\n";
-	}
+	if (titleColor       != TITLE)         { outfile << "title="         << titleColor       << "\n"; }
+	if (commentColor     != COMMENT)       { outfile << "comment="       << commentColor     << "\n"; }
+	if (matchColor       != MATCH)         { outfile << "match="         << matchColor       << "\n"; }
+	if (backgroundColor  != BACKGROUND)    { outfile << "background="    << backgroundColor  << "\n"; }
+	if (highlightColor   != HIGHLIGHT)     { outfile << "highlight="     << highlightColor   << "\n"; }
+	if (regularFont      != REGULAR)       { outfile << "regular="       << regularFont      << "\n"; }
+	if (boldFont         != BOLD)          { outfile << "bold="          << boldFont         << "\n"; }
+	if (smallRegularFont != SMALL_REGULAR) { outfile << "small-regular=" << smallRegularFont << "\n"; }
+	if (smallBoldFont    != SMALL_BOLD)    { outfile << "small-bold="    << smallBoldFont    << "\n"; }
+	if (largeFont        != LARGE)         { outfile << "large="         << largeFont        << "\n"; }
 	outfile << "\n[Application Launch Counts]\n";
 	for (Application app : applications) {
 		if (app.count > 0) {
@@ -409,13 +415,12 @@ void onKeyPress (XEvent &event) {
 }
 
 void defineColor (Visual *visual, Colormap &colormap, Color &color, string hex) {
-	unsigned short red = stol(hex.substr(1, 2), nullptr, 16) * 256;
-	unsigned short green = stol(hex.substr(3, 2), nullptr, 16) * 256;
-	unsigned short blue = stol(hex.substr(5, 2), nullptr, 16) * 256;
-	unsigned short alpha = 255 * 256;
-	XRenderColor xrcolor = { .red = red, .green = green, .blue = blue, .alpha = alpha };
+	unsigned short r = stol(hex.substr(1, 2), nullptr, 16) * 256;
+	unsigned short g = stol(hex.substr(3, 2), nullptr, 16) * 256;
+	unsigned short b = stol(hex.substr(5, 2), nullptr, 16) * 256;
+	XRenderColor xrcolor = { .red = r, .green = g, .blue = b, .alpha = 255 * 256 };
 	XftColorAllocValue(display, visual, colormap, &xrcolor, &color.xft);
-	XColor xcolor = { .red = red, .green = green, .blue = blue };
+	XColor xcolor = { .red = r, .green = g, .blue = b };
 	XAllocColor(display, colormap, &xcolor);
 	color.x = xcolor.pixel;
 }
@@ -436,11 +441,11 @@ int main () {
 	defineColor(visual, colormap, style.highlight, highlightColor);
 	defineColor(visual, colormap, style.match, matchColor);
 
-	style.regular = XftFontOpenName(display, screen, "Ubuntu,sans-11");
-	style.bold = XftFontOpenName(display, screen, "Ubuntu,sans-11:bold");
-	style.regularSmall = XftFontOpenName(display, screen, "Ubuntu,sans-10");
-	style.boldSmall = XftFontOpenName(display, screen, "Ubuntu,sans-10:bold");
-	style.large = XftFontOpenName(display, screen, "Ubuntu,sans-20:light");
+	style.regular = XftFontOpenName(display, screen, regularFont.c_str());
+	style.bold = XftFontOpenName(display, screen, boldFont.c_str());
+	style.smallRegular = XftFontOpenName(display, screen, smallRegularFont.c_str());
+	style.smallBold = XftFontOpenName(display, screen, smallBoldFont.c_str());
+	style.large = XftFontOpenName(display, screen, largeFont.c_str());
 
 	XSetWindowAttributes attributes;
 	attributes.background_pixel = style.background.x;

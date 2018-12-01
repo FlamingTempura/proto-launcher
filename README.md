@@ -31,9 +31,9 @@ proto-launcher
 
 To use a keyboard combo to open the launcher, configure your desktop environment to run `proto-launcher` when you press a key shortcut.
 
-## Color scheme
+## Color scheme and fonts
 
-Custom colors can be added to the start of `~/.config/launcher.conf`. e.g.:
+Custom colors and fonts can be added to the start of `~/.config/launcher.conf`. E.g.:
 
 ```
 [Style]
@@ -42,9 +42,16 @@ comment=#75715e
 match=#a6e22e
 background=#272822
 highlight=#49483E
+regular=Ubuntu,sans-11
+bold=Ubuntu,sans-11:bold
+small-regular=Ubuntu,sans-10
+small-bold=Ubuntu,sans-10:bold
+large=Ubuntu,sans-20:light
 ```
 
 ![image](https://user-images.githubusercontent.com/1085434/49332368-0741e200-f5a4-11e8-8efb-4bfa71fbd3b9.png)
+
+Colors must be 6-digit hexidecimal strings prefixed with a hash (e.g. `#ff0000`). Fonts must be written as `<families>-<size>:<options>` (e.g. `verdana-10:italic`). For more examples see the [fontconfig docs](https://www.freedesktop.org/software/fontconfig/fontconfig-user.html#AEN36).
 
 ## Uninstall
 
