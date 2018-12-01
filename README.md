@@ -32,6 +32,20 @@ proto-launcher
 
 To use a keyboard combo to open the launcher, configure your desktop environment to run `proto-launcher` when you press a key shortcut.
 
+## Color scheme
+
+Custom colors can be added to the start of `~/.config/launcher.prefs`. e.g.:
+
+```
+title:#f8f8f2
+comment:#75715e
+match:#a6e22e
+background:#272822
+highlight:#49483e
+```
+
+![image](https://user-images.githubusercontent.com/1085434/49332368-0741e200-f5a4-11e8-8efb-4bfa71fbd3b9.png)
+
 ## Uninstall
 
 ```sh

@@ -37,7 +37,7 @@ struct Color {
 };
 
 struct Style {
-	Color black, gray, white, highlight;
+	Color title, comment, background, highlight, match;
 	XftFont *regular, *bold, *regularSmall, *boldSmall, *large;
 };
 
@@ -65,6 +65,18 @@ bool cursorVisible = false;
 vector<Application> applications;
 XftDraw *xftdraw;
 vector<Result> results;
+
+const string defaultBackgroundColor = "#ffffff";
+const string defaultHighlightColor = "#f8c291";
+const string defaultTitleColor = "#111111";
+const string defaultCommentColor = "#999999";
+const string defaultMatchColor = "#111111";
+
+string backgroundColor = defaultBackgroundColor;
+string highlightColor = defaultHighlightColor;
+string titleColor = defaultTitleColor;
+string commentColor = defaultCommentColor;
+string matchColor = defaultMatchColor;
 
 char lowercase (const char &ch) {
 	return ch <= 'Z' && ch >= 'A' ? ch - ('Z' - 'z') : ch;
@@ -128,10 +140,10 @@ void renderTextInput (const bool showCursor) {
 	int tx = 14;
 	int ty = 0.66 * ROW_HEIGHT * 1.25;
 	int cursorX = 14;
-	renderText(&cursorX, ty, query.substr(0, cursor), style.large, style.white); // invisible text just to figure out cursor position
-	XSetForeground(display, gc, showCursor ? style.black.x : style.white.x);
+	renderText(&cursorX, ty, query.substr(0, cursor), style.large, style.title); // invisible text just to figure out cursor position
+	XSetForeground(display, gc, showCursor ? style.title.x : style.title.x);
 	XFillRectangle(display, window, gc, cursorX, ROW_HEIGHT * 1.25 / 4, 3, ROW_HEIGHT * 1.25 / 2);
-	renderText(&tx, ty, query, style.large, style.black);
+	renderText(&tx, ty, query, style.large, style.title);
 	cursorVisible = showCursor;
 }
 
@@ -151,9 +163,7 @@ void render () {
 	int height = (resultCount + 1.25) * ROW_HEIGHT;
 
 	XMoveResizeWindow(display, window, x, 200, width, height);
-
 	XClearWindow(display, window);
-	
 	renderTextInput(true);
 	XSetForeground(display, gc, style.highlight.x);
 	XSetLineAttributes(display, gc, LINE_WIDTH, LineSolid, CapButt, JoinRound);
@@ -172,27 +182,27 @@ void render () {
 		int x = 14;
 		int namei = lowercase(result.app->name).find(lowercase(query));
 		if (namei == string::npos) {
-			renderText(&x, y, result.app->name.c_str(), style.regular, style.black);
+			renderText(&x, y, result.app->name.c_str(), style.regular, style.title);
 		} else {
 			string str = result.app->name.substr(0, namei);
-			renderText(&x, y, str.c_str(), style.regular, style.black);
+			renderText(&x, y, str.c_str(), style.regular, style.title);
 			str = result.app->name.substr(namei, query.length());
-			renderText(&x, y, str.c_str(), style.bold, style.black);
+			renderText(&x, y, str.c_str(), style.bold, style.match);
 			str = result.app->name.substr(namei + query.length());
-			renderText(&x, y, str.c_str(), style.regular, style.black);
+			renderText(&x, y, str.c_str(), style.regular, style.title);
 		}
 
 		x += 8;
 		int commenti = lowercase(result.app->comment).find(lowercase(query));
 		if (commenti == string::npos) {
-			renderText(&x, y, result.app->comment.c_str(), style.regularSmall, style.gray);
+			renderText(&x, y, result.app->comment.c_str(), style.regularSmall, style.comment);
 		} else {
 			string str = result.app->comment.substr(0, commenti);
-			renderText(&x, y, str.c_str(), style.regularSmall, style.gray);
+			renderText(&x, y, str.c_str(), style.regularSmall, style.comment);
 			str = result.app->comment.substr(commenti, query.length());
-			renderText(&x, y, str.c_str(), style.boldSmall, style.gray);
+			renderText(&x, y, str.c_str(), style.boldSmall, style.comment);
 			str = result.app->comment.substr(commenti + query.length());
-			renderText(&x, y, str.c_str(), style.regularSmall, style.gray);
+			renderText(&x, y, str.c_str(), style.regularSmall, style.comment);
 		}
 	}
 
@@ -206,11 +216,23 @@ void readConfig () {
 		while (getline(infile, line)) {
 			int i = line.find(":");
 			if (i > 0) {
-				string appid = line.substr(0, i);
-				for (Application &app : applications) {
-					if (app.id == appid) {
-						app.count = stoi(line.substr(i + 1));
-						break;
+				string key = line.substr(0, i);
+				if (key == "title") {
+					titleColor = line.substr(i + 1);
+				} else if (key == "comment") {
+					commentColor = line.substr(i + 1);
+				} else if (key == "background") {
+					backgroundColor = line.substr(i + 1);
+				} else if (key == "highlight") {
+					highlightColor = line.substr(i + 1);
+				} else if (key == "match") {
+					matchColor = line.substr(i + 1);
+				} else {
+					for (Application &app : applications) {
+						if (app.id == key) {
+							app.count = stoi(line.substr(i + 1));
+							break;
+						}
 					}
 				}
 			}
@@ -221,6 +243,21 @@ void readConfig () {
 void writeConfig () {
 	ofstream outfile;
 	outfile.open(CONFIG);
+	if (titleColor != defaultTitleColor) {
+		outfile << "title:" << titleColor << "\n";
+	}
+	if (commentColor != defaultCommentColor) {
+		outfile << "comment:" << commentColor << "\n";
+	}
+	if (matchColor != defaultMatchColor) {
+		outfile << "match:" << matchColor << "\n";
+	}
+	if (backgroundColor != defaultBackgroundColor) {
+		outfile << "background:" << backgroundColor << "\n";
+	}
+	if (highlightColor != defaultHighlightColor) {
+		outfile << "highlight:" << highlightColor << "\n";
+	}
 	for (Application app : applications) {
 		if (app.count > 0) {
 			outfile << app.id << ":" << app.count << "\n";
@@ -275,7 +312,6 @@ void getApplications () {
 			}
 		}
 	}
-	readConfig();
 }
 
 void setProperty (const char *property, const char *value) {
@@ -379,11 +415,11 @@ void onKeyPress (XEvent &event) {
 	}
 }
 
-void defineColor (Visual *visual, Colormap &colormap, Color &color, unsigned short red, unsigned short green, unsigned short blue, unsigned short alpha) {
-	red *= 255;
-	green *= 255;
-	blue *= 255;
-	alpha *= 255;
+void defineColor (Visual *visual, Colormap &colormap, Color &color, string hex) {
+	unsigned short red = stol(hex.substr(1, 2), nullptr, 16) * 256;
+	unsigned short green = stol(hex.substr(3, 2), nullptr, 16) * 256;
+	unsigned short blue = stol(hex.substr(5, 2), nullptr, 16) * 256;
+	unsigned short alpha = 255 * 256;
 	XRenderColor xrcolor = { .red = red, .green = green, .blue = blue, .alpha = alpha };
 	XftColorAllocValue(display, visual, colormap, &xrcolor, &color.xft);
 	XColor xcolor = { .red = red, .green = green, .blue = blue };
@@ -393,6 +429,7 @@ void defineColor (Visual *visual, Colormap &colormap, Color &color, unsigned sho
 
 int main () {
 	getApplications();
+	readConfig();
 	display = XOpenDisplay(NULL);
 	screen = DefaultScreen(display);
 
@@ -400,8 +437,14 @@ int main () {
 	Colormap colormap = DefaultColormap(display, screen);
 	int depth = DefaultDepth(display, screen);
 
+	defineColor(visual, colormap, style.title, titleColor);
+	defineColor(visual, colormap, style.comment, commentColor);
+	defineColor(visual, colormap, style.background, backgroundColor);
+	defineColor(visual, colormap, style.highlight, highlightColor);
+	defineColor(visual, colormap, style.match, matchColor);
+
 	XSetWindowAttributes attributes;
-	attributes.background_pixel = WhitePixel(display, screen);
+	attributes.background_pixel = style.background.x;
 
 	window = XCreateWindow(display, XRootWindow(display, screen),
 		-100, -100, 100, 100,
@@ -417,11 +460,6 @@ int main () {
 
 	XMapWindow(display, window);
 
-	defineColor(visual, colormap, style.black, 80, 0, 0, 255);
-	defineColor(visual, colormap, style.gray, 153, 153, 153, 255);
-	defineColor(visual, colormap, style.white, 255, 255, 255, 255);
-	defineColor(visual, colormap, style.highlight, 248, 194, 145, 255);
-
 	style.regular = XftFontOpenName(display, screen, "Ubuntu,sans-11");
 	style.bold = XftFontOpenName(display, screen, "Ubuntu,sans-11:bold");
 	style.regularSmall = XftFontOpenName(display, screen, "Ubuntu,sans-10");
@@ -433,7 +471,6 @@ int main () {
 	XEvent event;
 	while (1) {
 		while (XCheckMaskEvent(display, ExposureMask | KeyPressMask | FocusChangeMask, &event)) {
-			//if (event.type == Expose) {  }
 			if (event.type == KeyPress) { onKeyPress(event); }
 			if (event.type == FocusOut) { exit(0); }
 			search();
