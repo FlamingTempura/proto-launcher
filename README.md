@@ -44,8 +44,8 @@ background=#272822
 highlight=#49483E
 regular=Ubuntu,sans-11
 bold=Ubuntu,sans-11:bold
-small-regular=Ubuntu,sans-10
-small-bold=Ubuntu,sans-10:bold
+smallregular=Ubuntu,sans-10
+smallbold=Ubuntu,sans-10:bold
 large=Ubuntu,sans-20:light
 ```
 

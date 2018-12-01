@@ -65,7 +65,9 @@ int screen;
 Window window;
 Style style;
 GC gc;
+XIC xic;
 string query = "";
+string queryi = ""; // lower case
 int selected = 0;
 int cursor = 0;
 bool cursorVisible = false;
@@ -83,41 +85,30 @@ string smallRegularFont = SMALL_REGULAR;
 string smallBoldFont = SMALL_BOLD;
 string largeFont = LARGE;
 
-char lowercase (const char &ch) {
-	return ch <= 'Z' && ch >= 'A' ? ch - ('Z' - 'z') : ch;
-}
-
 string lowercase (const string &str) {
-	string out = "";
-	for (const char ch : str) {
-		out += lowercase(ch);
-	}
+	string out = str;
+	transform(out.begin(), out.end(), out.begin(), ::tolower);
 	return out;
-}
+};
 
-bool compareByScore(const Result &a, const Result &b) {
-	return a.score > b.score;
-}
-
-void renderText(int *x, const int y, string text, XftFont *font, Color color) {
-	XftDrawString8(xftdraw, &color.xft, font, *x, y, (XftChar8 *) text.c_str(), text.length());
+int renderText(const int x, const int y, string text, XftFont *font, const Color &color) {
+	XftDrawString8(xftdraw, &color.xft, font, x, y, (XftChar8 *) text.c_str(), text.length());
 	if (text.back() == ' ') { // XftTextExtents appears to not count whitespace at the end of a string, so move it to the beginning
 		text = " " + text;
 	}
 	XGlyphInfo extents;
 	XftTextExtents8(display, font, (FcChar8 *) text.c_str(), text.length(), &extents);
-	*x += extents.width;
+	return x + extents.width;
 }
 
 void search () {
 	results = {};
-	if (query.length() > 0) {
-		const string lquery = lowercase(query);
+	if (queryi.length() > 0) {
 		for (Application &app : applications) {
 			int score = 0;
 			int i = 0;
 			for (const Keyword &keyword : app.keywords) {
-				int matchIndex = keyword.word.find(lquery);
+				int matchIndex = keyword.word.find(queryi);
 				if (matchIndex != string::npos) {
 					// score determined by:
 					// - apps whose names begin with the query string appear first
@@ -132,7 +123,9 @@ void search () {
 				results.push_back({ &app, score });
 			}
 		}
-		sort(results.begin(), results.end(), compareByScore);
+		sort(results.begin(), results.end(), [](const Result &a, const Result &b) {
+			return b.score < a.score;
+		});
 		if (results.size() > 10) {
 			results.resize(10); // limit to 10 results
 		}
@@ -142,13 +135,11 @@ void search () {
 auto lastBlink = std::chrono::system_clock::now();
 void renderTextInput (const bool showCursor) {
 	lastBlink = std::chrono::system_clock::now();
-	int tx = 14;
 	int ty = 0.66 * ROW_HEIGHT * 1.25;
-	int cursorX = 14;
-	renderText(&cursorX, ty, query.substr(0, cursor), style.large, style.title); // invisible text just to figure out cursor position
-	XSetForeground(display, gc, showCursor ? style.title.x : style.title.x);
+	int cursorX = renderText(14, ty, query.substr(0, cursor), style.large, style.background); // invisible text just to figure out cursor position
+	XSetForeground(display, gc, showCursor ? style.title.x : style.background.x);
 	XFillRectangle(display, window, gc, cursorX, ROW_HEIGHT * 1.25 / 4, 3, ROW_HEIGHT * 1.25 / 2);
-	renderText(&tx, ty, query, style.large, style.title);
+	renderText(14, ty, query, style.large, style.title);
 	cursorVisible = showCursor;
 }
 
@@ -185,60 +176,58 @@ void render () {
 		
 		int y = (i + 1.25) * ROW_HEIGHT + 0.63 * ROW_HEIGHT;
 		int x = 14;
-		int namei = lowercase(result.app->name).find(lowercase(query));
+		int namei = lowercase(result.app->name).find(queryi);
 		if (namei == string::npos) {
-			renderText(&x, y, result.app->name.c_str(), style.regular, style.title);
+			x = renderText(x, y, result.app->name.c_str(), style.regular, style.title);
 		} else {
 			string str = result.app->name.substr(0, namei);
-			renderText(&x, y, str.c_str(), style.regular, style.title);
+			x = renderText(x, y, str.c_str(), style.regular, style.title);
 			str = result.app->name.substr(namei, query.length());
-			renderText(&x, y, str.c_str(), style.bold, style.match);
+			x = renderText(x, y, str.c_str(), style.bold, style.match);
 			str = result.app->name.substr(namei + query.length());
-			renderText(&x, y, str.c_str(), style.regular, style.title);
+			x = renderText(x, y, str.c_str(), style.regular, style.title);
 		}
 
 		x += 8;
-		int commenti = lowercase(result.app->comment).find(lowercase(query));
+		int commenti = lowercase(result.app->comment).find(queryi);
 		if (commenti == string::npos) {
-			renderText(&x, y, result.app->comment.c_str(), style.smallRegular, style.comment);
+			renderText(x, y, result.app->comment.c_str(), style.smallRegular, style.comment);
 		} else {
 			string str = result.app->comment.substr(0, commenti);
-			renderText(&x, y, str.c_str(), style.smallRegular, style.comment);
+			x = renderText(x, y, str.c_str(), style.smallRegular, style.comment);
 			str = result.app->comment.substr(commenti, query.length());
-			renderText(&x, y, str.c_str(), style.smallBold, style.comment);
+			x = renderText(x, y, str.c_str(), style.smallBold, style.comment);
 			str = result.app->comment.substr(commenti + query.length());
-			renderText(&x, y, str.c_str(), style.smallRegular, style.comment);
+			renderText(x, y, str.c_str(), style.smallRegular, style.comment);
 		}
 	}
 }
 
 void readConfig () {
 	struct stat info;
-	if (stat(CONFIG.c_str(), &info) == 0) {
-		ifstream infile(CONFIG);
-		string line;
-		while (getline(infile, line)) {
-			int i = line.find("=");
-			if (i > 0) {
-				string key = line.substr(0, i);
-				string val = line.substr(i + 1);
-				if (key == "title")         { titleColor = val; }       else
-				if (key == "comment")       { commentColor = val; }     else
-				if (key == "background")    { backgroundColor = val; }  else
-				if (key == "highlight")     { highlightColor = val; }   else
-				if (key == "match")         { matchColor = val; }       else
-				if (key == "regular")       { regularFont = val; }      else
-				if (key == "bold")          { boldFont = val; }         else
-				if (key == "small-regular") { smallRegularFont = val; } else
-				if (key == "small-bold")    { smallBoldFont = val; }    else
-				if (key == "large")         { largeFont = val; }
-				else {
-					for (Application &app : applications) {
-						if (app.id == key) {
-							app.count = stoi(val);
-							break;
-						}
-					}
+	if (stat(CONFIG.c_str(), &info) != 0) { return; }
+	ifstream infile(CONFIG);
+	string line;
+	while (getline(infile, line)) {
+		int i = line.find_last_of("=");
+		if (i == string::npos) { continue; }
+		string key = line.substr(0, i);
+		string val = line.substr(i + 1);
+		if (key == "title")        { titleColor = val; }       else
+		if (key == "comment")      { commentColor = val; }     else
+		if (key == "background")   { backgroundColor = val; }  else
+		if (key == "highlight")    { highlightColor = val; }   else
+		if (key == "match")        { matchColor = val; }       else
+		if (key == "regular")      { regularFont = val; }      else
+		if (key == "bold")         { boldFont = val; }         else
+		if (key == "smallregular") { smallRegularFont = val; } else
+		if (key == "smallbold")    { smallBoldFont = val; }    else
+		if (key == "large")        { largeFont = val; }
+		else {
+			for (Application &app : applications) {
+				if (app.id == key) {
+					app.count = stoi(val);
+					break;
 				}
 			}
 		}
@@ -249,16 +238,16 @@ void writeConfig () {
 	ofstream outfile;
 	outfile.open(CONFIG);
 	outfile << "[Style]\n";
-	if (titleColor       != TITLE)         { outfile << "title="         << titleColor       << "\n"; }
-	if (commentColor     != COMMENT)       { outfile << "comment="       << commentColor     << "\n"; }
-	if (matchColor       != MATCH)         { outfile << "match="         << matchColor       << "\n"; }
-	if (backgroundColor  != BACKGROUND)    { outfile << "background="    << backgroundColor  << "\n"; }
-	if (highlightColor   != HIGHLIGHT)     { outfile << "highlight="     << highlightColor   << "\n"; }
-	if (regularFont      != REGULAR)       { outfile << "regular="       << regularFont      << "\n"; }
-	if (boldFont         != BOLD)          { outfile << "bold="          << boldFont         << "\n"; }
-	if (smallRegularFont != SMALL_REGULAR) { outfile << "small-regular=" << smallRegularFont << "\n"; }
-	if (smallBoldFont    != SMALL_BOLD)    { outfile << "small-bold="    << smallBoldFont    << "\n"; }
-	if (largeFont        != LARGE)         { outfile << "large="         << largeFont        << "\n"; }
+	if (titleColor       != TITLE)         { outfile << "title="        << titleColor       << "\n"; }
+	if (commentColor     != COMMENT)       { outfile << "comment="      << commentColor     << "\n"; }
+	if (matchColor       != MATCH)         { outfile << "match="        << matchColor       << "\n"; }
+	if (backgroundColor  != BACKGROUND)    { outfile << "background="   << backgroundColor  << "\n"; }
+	if (highlightColor   != HIGHLIGHT)     { outfile << "highlight="    << highlightColor   << "\n"; }
+	if (regularFont      != REGULAR)       { outfile << "regular="      << regularFont      << "\n"; }
+	if (boldFont         != BOLD)          { outfile << "bold="         << boldFont         << "\n"; }
+	if (smallRegularFont != SMALL_REGULAR) { outfile << "smallregular=" << smallRegularFont << "\n"; }
+	if (smallBoldFont    != SMALL_BOLD)    { outfile << "smallbold="    << smallBoldFont    << "\n"; }
+	if (largeFont        != LARGE)         { outfile << "large="        << largeFont        << "\n"; }
 	outfile << "\n[Application Launch Counts]\n";
 	for (Application app : applications) {
 		if (app.count > 0) {
@@ -348,73 +337,53 @@ void launch (Application *app) {
 void onKeyPress (XEvent &event) {
 	char text[128] = {0};
 	KeySym keysym;
-	int textlength = XLookupString(&event.xkey, text, sizeof text, &keysym, NULL);
-	
+	int textlength = Xutf8LookupString(xic, &event.xkey, text, sizeof text, &keysym, NULL);
 	switch (keysym) {
 		case XK_Escape:
 			exit(0);
 			break;
-
 		case XK_Return:
 			launch(results[selected].app);
 			break;
-
 		case XK_Up:
-			selected--;
-			if (selected < 0) {
-				selected = results.size() - 1;
-			}
+			selected = selected > 0 ? selected - 1 : results.size() - 1;
 			break;
-		
 		case XK_Down:
-			selected++;
-			if (selected >= results.size()) {
-				selected = 0;
-			}
+			selected = selected < results.size() - 1 ? selected + 1 : 0;
 			break;
-
 		case XK_Left:
-			if (cursor > 0) {
-				cursor--;
-			}
+			cursor = cursor > 0 ? cursor - 1 : 0;
 			break;
-
 		case XK_Right:
-			if (cursor < query.length()) {
-				cursor++;
-			}
+			cursor = cursor < query.length() ? cursor + 1 : query.length();
 			break;
-
 		case XK_Home:
 			cursor = 0;
 			break;
-
 		case XK_End:
 			cursor = query.length();
 			break;
-
 		case XK_BackSpace:
 			if (cursor > 0) {
-				query = query.substr(0, cursor - 1) + query.substr(cursor, query.length());
+				query.erase(cursor - 1, 1);
 				cursor--;
 			}
 			break;
-
 		case XK_Delete:
 			if (cursor < query.length()) {
-				query = query.substr(0, cursor) + query.substr(cursor + 1, query.length());
+				query.erase(cursor, 1);
 			}
 			break;
-
 		default:
-			if (textlength == 1) {
+			if (textlength == 1) { // check it's a character
 				query = query.substr(0, cursor) + text + query.substr(cursor, query.length());
 				cursor++;
 			}
 	}
+	queryi = lowercase(query);
 }
 
-void defineColor (Visual *visual, Colormap &colormap, Color &color, string hex) {
+void defineColor (Visual *visual, const Colormap &colormap, Color &color, const string hex) {
 	unsigned short r = stol(hex.substr(1, 2), nullptr, 16) * 256;
 	unsigned short g = stol(hex.substr(3, 2), nullptr, 16) * 256;
 	unsigned short b = stol(hex.substr(5, 2), nullptr, 16) * 256;
@@ -428,9 +397,9 @@ void defineColor (Visual *visual, Colormap &colormap, Color &color, string hex) 
 int main () {
 	getApplications();
 	readConfig();
+
 	display = XOpenDisplay(NULL);
 	screen = DefaultScreen(display);
-
 	Visual *visual = DefaultVisual(display, screen);
 	Colormap colormap = DefaultColormap(display, screen);
 	int depth = DefaultDepth(display, screen);
@@ -454,6 +423,12 @@ int main () {
 		-100, -100, 100, 100,
 		5, depth, InputOutput, visual, CWBackPixel, &attributes);
 	XSelectInput(display, window, ExposureMask | KeyPressMask | FocusChangeMask);
+	XIM xim = XOpenIM(display, 0, 0, 0);
+	xic = XCreateIC(xim, // input context
+		XNInputStyle,   XIMPreeditNothing | XIMStatusNothing,
+		XNClientWindow, window,
+		XNFocusWindow,  window,
+		NULL);
 
 	XGCValues gr_values;
 	gc = XCreateGC(display, window, 0, &gr_values);
