@@ -20,7 +20,7 @@ make
 make install
 ```
 
-You may also need to install libxft.
+You may also need to install libxft and ubuntu fonts.
 
 ## Running the launcher
 
