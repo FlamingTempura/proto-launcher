@@ -45,7 +45,7 @@ struct Style {
 #define LINE_WIDTH 6
 
 const char* HOME_DIR = getenv("HOME");
-const string CONFIG = ((string) HOME_DIR) + "/.config/launcher.prefs";
+const string CONFIG = ((string) HOME_DIR) + "/.config/launcher.conf";
 
 const string APP_DIRS[] = {
 	"/usr/share/applications",
@@ -205,7 +205,6 @@ void render () {
 			renderText(&x, y, str.c_str(), style.regularSmall, style.comment);
 		}
 	}
-
 }
 
 void readConfig () {
@@ -214,7 +213,7 @@ void readConfig () {
 		ifstream infile(CONFIG);
 		string line;
 		while (getline(infile, line)) {
-			int i = line.find(":");
+			int i = line.find("=");
 			if (i > 0) {
 				string key = line.substr(0, i);
 				if (key == "title") {
@@ -243,24 +242,26 @@ void readConfig () {
 void writeConfig () {
 	ofstream outfile;
 	outfile.open(CONFIG);
+	outfile << "[Style]\n";
 	if (titleColor != defaultTitleColor) {
-		outfile << "title:" << titleColor << "\n";
+		outfile << "title=" << titleColor << "\n";
 	}
 	if (commentColor != defaultCommentColor) {
-		outfile << "comment:" << commentColor << "\n";
+		outfile << "comment=" << commentColor << "\n";
 	}
 	if (matchColor != defaultMatchColor) {
-		outfile << "match:" << matchColor << "\n";
+		outfile << "match=" << matchColor << "\n";
 	}
 	if (backgroundColor != defaultBackgroundColor) {
-		outfile << "background:" << backgroundColor << "\n";
+		outfile << "background=" << backgroundColor << "\n";
 	}
 	if (highlightColor != defaultHighlightColor) {
-		outfile << "highlight:" << highlightColor << "\n";
+		outfile << "highlight=" << highlightColor << "\n";
 	}
+	outfile << "\n[Application Launch Counts]\n";
 	for (Application app : applications) {
 		if (app.count > 0) {
-			outfile << app.id << ":" << app.count << "\n";
+			outfile << app.id << "=" << app.count << "\n";
 		}
 	}
 	outfile.close();
@@ -328,13 +329,11 @@ void launch (Application *app) {
 		vector<char*> args;
 		string arg;
 		while (getline(ss, arg, ' ')) {
-			//std::cout << "~:" << arg << "\n";
 			if (arg.find('%') != 0) {
 				string *a = new string(arg);
 				args.push_back(const_cast<char *>(a->c_str()));
 			}
 		}
-		//std::cout << "0:" << args[0] << "\n";
 		args.push_back(NULL);
 		char **command = &args[0];
 		execvp(command[0], command);
@@ -361,7 +360,6 @@ void onKeyPress (XEvent &event) {
 
 		case XK_Up:
 			selected--;
-			std::cout << "0:" << selected << "\n";
 			if (selected < 0) {
 				selected = results.size() - 1;
 			}
