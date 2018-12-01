@@ -8,13 +8,6 @@ ifeq ($(PREFIX),)
 	PREFIX := /usr/local
 endif
 
-.PHONY         : all
-all            : proto-launcher
-
-.PHONY         : build-launch
-build-launch   : clean all
-	./proto-launcher
-
 proto-launcher : launcher.cpp
 	g++ -o proto-launcher launcher.cpp $(LANG) $(SEARCH_DIRS) $(LIB_DIRS) $(LIBS) $(OPTIMIZATION)
 
@@ -23,9 +16,13 @@ clean          :
 	rm -f proto-launcher
 
 .PHONY         : install
-install        : all
+install        : clean proto-launcher
 	install -m 0755 proto-launcher $(PREFIX)/bin
 
 .PHONY         : uninstall
 uninstall      :
 	rm $(PREFIX)/bin/proto-launcher
+
+.PHONY         : run
+run            : clean proto-launcher
+	./proto-launcher

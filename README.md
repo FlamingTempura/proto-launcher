@@ -16,7 +16,6 @@ This has only been tested on Arch Linux -- comments and suggestions welcome on t
 ```sh
 git clone https://github.com/FlamingTempura/proto-launcher.git
 cd proto-launcher
-make
 make install
 ```
 

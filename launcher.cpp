@@ -11,6 +11,7 @@
 #include <X11/Xutil.h> // used to handle keyboard events
 #include <X11/Xft/Xft.h> // fonts (requires libxft)
 #include <filesystem> // used for scanning application dirs
+#include <pwd.h> // used to get user home dir
 
 namespace fs = std::filesystem;
 using std::string, std::vector, std::ifstream, std::ofstream, std::stringstream;
@@ -41,17 +42,18 @@ struct Style {
 	XftFont *regular, *bold, *regularSmall, *boldSmall, *large;
 };
 
-#define ROW_HEIGHT 72
-#define LINE_WIDTH 6
-
-const char* HOME_DIR = getenv("HOME");
-const string CONFIG = ((string) HOME_DIR) + "/.config/launcher.conf";
-
-const string APP_DIRS[] = {
-	"/usr/share/applications",
-	"/usr/local/share/applications",
-	(string) HOME_DIR + "/.local/share/applications"
-};
+const    int ROW_HEIGHT         = 72;
+const    int LINE_WIDTH         = 6;
+const string DEFAULT_BACKGROUND = "#ffffff";
+const string DEFAULT_HIGHLIGHT  = "#f8c291";
+const string DEFAULT_TITLE      = "#111111";
+const string DEFAULT_COMMENT    = "#999999";
+const string DEFAULT_MATCH      = "#111111";
+const string HOME_DIR           = getenv("HOME")            != NULL ? getenv("HOME")            : getpwuid(getuid())->pw_dir;
+const string CONFIG_DIR         = getenv("XDG_CONFIG_HOME") != NULL ? getenv("XDG_CONFIG_HOME") : HOME_DIR + "/.config";
+const string DATA_DIR           = getenv("XDG_DATA_HOME")   != NULL ? getenv("XDG_DATA_HOME")   : HOME_DIR + "/.local/share";
+const string CONFIG             = CONFIG_DIR + "/launcher.conf";
+const string APP_DIRS[]         = { "/usr/share/applications", "/usr/local/share/applications", DATA_DIR + "/applications" };
 
 Display *display;
 int screen;
@@ -65,18 +67,11 @@ bool cursorVisible = false;
 vector<Application> applications;
 XftDraw *xftdraw;
 vector<Result> results;
-
-const string defaultBackgroundColor = "#ffffff";
-const string defaultHighlightColor = "#f8c291";
-const string defaultTitleColor = "#111111";
-const string defaultCommentColor = "#999999";
-const string defaultMatchColor = "#111111";
-
-string backgroundColor = defaultBackgroundColor;
-string highlightColor = defaultHighlightColor;
-string titleColor = defaultTitleColor;
-string commentColor = defaultCommentColor;
-string matchColor = defaultMatchColor;
+string backgroundColor = DEFAULT_BACKGROUND;
+string highlightColor = DEFAULT_HIGHLIGHT;
+string titleColor = DEFAULT_TITLE;
+string commentColor = DEFAULT_COMMENT;
+string matchColor = DEFAULT_MATCH;
 
 char lowercase (const char &ch) {
 	return ch <= 'Z' && ch >= 'A' ? ch - ('Z' - 'z') : ch;
@@ -243,19 +238,19 @@ void writeConfig () {
 	ofstream outfile;
 	outfile.open(CONFIG);
 	outfile << "[Style]\n";
-	if (titleColor != defaultTitleColor) {
+	if (titleColor != DEFAULT_TITLE) {
 		outfile << "title=" << titleColor << "\n";
 	}
-	if (commentColor != defaultCommentColor) {
+	if (commentColor != DEFAULT_COMMENT) {
 		outfile << "comment=" << commentColor << "\n";
 	}
-	if (matchColor != defaultMatchColor) {
+	if (matchColor != DEFAULT_MATCH) {
 		outfile << "match=" << matchColor << "\n";
 	}
-	if (backgroundColor != defaultBackgroundColor) {
+	if (backgroundColor != DEFAULT_BACKGROUND) {
 		outfile << "background=" << backgroundColor << "\n";
 	}
-	if (highlightColor != defaultHighlightColor) {
+	if (highlightColor != DEFAULT_HIGHLIGHT) {
 		outfile << "highlight=" << highlightColor << "\n";
 	}
 	outfile << "\n[Application Launch Counts]\n";
@@ -324,7 +319,7 @@ void setProperty (const char *property, const char *value) {
 void launch (Application *app) {
 	int pid = fork(); // this duplicates the launcher process
 	if (pid == 0) { // if this is the child process, replace it with the application
-		chdir(HOME_DIR);
+		chdir(HOME_DIR.c_str());
 		stringstream ss(app->cmd);
 		vector<char*> args;
 		string arg;
@@ -441,6 +436,12 @@ int main () {
 	defineColor(visual, colormap, style.highlight, highlightColor);
 	defineColor(visual, colormap, style.match, matchColor);
 
+	style.regular = XftFontOpenName(display, screen, "Ubuntu,sans-11");
+	style.bold = XftFontOpenName(display, screen, "Ubuntu,sans-11:bold");
+	style.regularSmall = XftFontOpenName(display, screen, "Ubuntu,sans-10");
+	style.boldSmall = XftFontOpenName(display, screen, "Ubuntu,sans-10:bold");
+	style.large = XftFontOpenName(display, screen, "Ubuntu,sans-20:light");
+
 	XSetWindowAttributes attributes;
 	attributes.background_pixel = style.background.x;
 
@@ -457,12 +458,6 @@ int main () {
 	setProperty("_NET_WM_STATE", "_NET_WM_STATE_MODAL");
 
 	XMapWindow(display, window);
-
-	style.regular = XftFontOpenName(display, screen, "Ubuntu,sans-11");
-	style.bold = XftFontOpenName(display, screen, "Ubuntu,sans-11:bold");
-	style.regularSmall = XftFontOpenName(display, screen, "Ubuntu,sans-10");
-	style.boldSmall = XftFontOpenName(display, screen, "Ubuntu,sans-10:bold");
-	style.large = XftFontOpenName(display, screen, "Ubuntu,sans-20:light");
 
 	xftdraw = XftDrawCreate(display, window, visual, colormap);
 
