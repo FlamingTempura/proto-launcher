@@ -251,6 +251,13 @@ void getApplications () {
 					if (app.cmd == "" && line.find("Exec=") == 0 && line.substr(5) != "") {
 						app.cmd = line.substr(5);
 					}
+					if (app.cmd == "" && line.find("Keywords=") == 0) {
+						stringstream ss(line.substr(9));
+						string word;
+						while (getline(ss, word, ' ')) {
+							app.keywords.push_back({ lowercase(word), 1 });
+						}
+					}
 				}
 				
 				stringstream ss(app.name);
