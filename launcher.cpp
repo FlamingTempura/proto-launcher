@@ -32,7 +32,6 @@ struct Keyword {
 struct Application {
 	string id, name, genericName, comment, cmd;
 	vector<Keyword> keywords;
-	int count = 0;
 };
 
 struct Result {
@@ -51,6 +50,8 @@ const string CONFIG        = CONFIG_DIR + "/launcher.conf";
 const string APP_DIRS[]    = { "/usr/share/applications", "/usr/local/share/applications", DATA_DIR + "/applications" };
 const StyleAttribute COLORS[] = { C_TITLE, C_COMMENT, C_BG, C_HIGHLIGHT, C_MATCH };
 const StyleAttribute FONTS[] = { F_REGULAR, F_BOLD, F_SMALLREGULAR, F_SMALLBOLD, F_LARGE };
+
+map<string, int> launches = {};
 
 map<StyleAttribute, const string> STYLE_ATTRIBUTES = {
 	{ C_TITLE, "title" },
@@ -217,7 +218,7 @@ void search () {
 				// - apps whose names begin with the query string appear first
 				// - apps whose names or descriptions contain the query string then appear
 				// - apps which hav e been opened most frequently should be prioritised
-				score = (100 - i) * keyword.weight * (matchIndex == 0 ? 10000 : 100) + app.count;
+				score = (100 - i) * keyword.weight * (matchIndex == 0 ? 10000 : 100) + launches[app.id];
 				break;
 			}
 			i++;
@@ -330,12 +331,7 @@ void readConfig () {
 				}
 			}
 		} else {
-			for (Application &app : applications) {
-				if (app.id == key) {
-					app.count = stoi(val);
-					break;
-				}
-			}
+			launches[key] = stoi(val);
 		}
 	}
 }
@@ -351,9 +347,10 @@ void writeConfig () {
 		}
 	}
 	outfile << "\n[Launches]\n";
-	for (const Application &app : applications) {
-		if (app.count > 0) {
-			outfile << app.id << "=" << app.count << "\n";
+
+	for (const auto &[appid, count] : launches) {
+		if (count > 0) {
+			outfile << appid << "=" << count << "\n";
 		}
 	}
 	outfile.close();
@@ -368,7 +365,7 @@ vector<Application> getApplications () {
 			Application app = {};
 			app.id = entry.path();
 			ifstream infile(app.id);
-			string line;
+			string line, keywords;
 			while (getline(infile, line)) {
 				if (app.name == "" && line.find("Name=") == 0) {
 					app.name = line.substr(5);
@@ -383,22 +380,23 @@ vector<Application> getApplications () {
 					app.cmd = line.substr(5);
 				}
 				if (app.cmd == "" && line.find("Keywords=") == 0) {
-					stringstream ss(lowercase(line.substr(9)));
-					string word;
-					while (getline(ss, word, ' ')) {
-						app.keywords.push_back({ word, 1 });
-					}
+					keywords = line.substr(9);
 				}
 			}
 			
-			stringstream ss(lowercase(app.name));
+			stringstream ss = stringstream(lowercase(app.name));
 			string word;
 			while (getline(ss, word, ' ')) {
 				app.keywords.push_back({ word, 1000 });
 			}
 
-			stringstream ss2(lowercase(app.genericName + ' ' + app.comment));
-			while (getline(ss2, word, ' ')) {
+			ss = stringstream(lowercase(keywords));
+			while (getline(ss, word, ';')) {
+				app.keywords.push_back({ word, 1 });
+			}
+
+			ss = stringstream(lowercase(app.genericName + ' ' + app.comment));
+			while (getline(ss, word, ' ')) {
 				app.keywords.push_back({ word, 1 });
 			}
 
@@ -431,7 +429,7 @@ void launch (Application &app) {
 		char **command = &args[0];
 		execvp(command[0], command);
 	} else {
-		app.count++;
+		launches[app.id]++;
 		writeConfig();
 	}
 	exit(0);
@@ -576,7 +574,6 @@ int main () {
 				if (query.length() > 0) {
 					if (!applicationsLoaded) {
 						applications = awaitApps.get();
-						readConfig(); // read the config again, this time getting app count data
 						applicationsLoaded = true;
 					}
 					search();
