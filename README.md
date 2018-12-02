@@ -2,7 +2,10 @@
 
 Minimalist and tiny (\~150KB) application launcher for Linux. Built in C++ with X11.
 
-![screenshot from 2018-11-25 22-40-40-min](https://user-images.githubusercontent.com/1085434/48985784-ad549e80-f103-11e8-9187-0261f25c6137.png)
+![image](https://user-images.githubusercontent.com/1085434/48985784-ad549e80-f103-11e8-9187-0261f25c6137.png)
+
+![image](https://user-images.githubusercontent.com/1085434/49340913-078ebb80-f63e-11e8-9f92-41e7bfea697a.png)
+
 
 Proto-launcher allows you to open applications which have desktop entries in the following directories:
 * `/usr/share/applications`
