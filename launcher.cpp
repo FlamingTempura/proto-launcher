@@ -17,6 +17,8 @@
 namespace fs = std::filesystem;
 using std::string, std::map, std::vector, std::ifstream, std::ofstream, std::stringstream;
 
+enum StyleAttribute { title, comment, background, highlight, match, regular, bold, smallregular, smallbold, large };
+
 struct Keyword {
 	string word;
 	int weight;
@@ -45,29 +47,39 @@ const string CONFIG_DIR    = getenv("XDG_CONFIG_HOME") != NULL ? getenv("XDG_CON
 const string DATA_DIR      = getenv("XDG_DATA_HOME")   != NULL ? getenv("XDG_DATA_HOME")   : HOME_DIR + "/.local/share";
 const string CONFIG        = CONFIG_DIR + "/launcher.conf";
 const string APP_DIRS[]    = { "/usr/share/applications", "/usr/local/share/applications", DATA_DIR + "/applications" };
+const StyleAttribute COLORS[] = { title, comment, background, highlight, match };
+const StyleAttribute FONTS[] = { regular, bold, smallregular, smallbold, large };
 
-//enum StyleType { title, comment, background, highlight, match, regular, bold, smallregular, smallbold, large };
-
-vector<string> STYLE_ATTRIBUTES = {
-	"title", "comment", "background", "highlight", "match", "regular", "bold", "smallregular", "smallbold", "large"
+map<StyleAttribute, const string> STYLE_ATTRIBUTES = {
+	{ title, "title" },
+	{ comment, "comment" },
+	{ background, "background" },
+	{ highlight, "highlight" },
+	{ match, "match" },
+	{ regular, "regular" },
+	{ bold, "bold" },
+	{ smallregular, "smallregular" },
+	{ smallbold, "smallbold" },
+	{ large, "large" }
 };
 
-map<string, string> DEFAULT_STYLE = {
-	{ "title", "#111111" },
-	{ "comment", "#999999" },
-	{ "background", "#ffffff" },
-	{ "highlight", "#f8c291" },
-	{ "match", "#111111" },
-	{ "regular", "Ubuntu,sans-11" },
-	{ "bold", "Ubuntu,sans-11:bold" },
-	{ "smallregular", "Ubuntu,sans-10" },
-	{ "smallbold", "Ubuntu,sans-10:bold" },
-	{ "large", "Ubuntu,sans-20:light" }
+map<StyleAttribute, string> DEFAULT_STYLE = {
+	{ title, "#111111" },
+	{ comment, "#999999" },
+	{ background, "#ffffff" },
+	{ highlight, "#f8c291" },
+	{ match, "#111111" },
+	{ regular, "Ubuntu,sans-11" },
+	{ bold, "Ubuntu,sans-11:bold" },
+	{ smallregular, "Ubuntu,sans-10" },
+	{ smallbold, "Ubuntu,sans-10:bold" },
+	{ large, "Ubuntu,sans-20:light" }
 };
-map<string, string> style = DEFAULT_STYLE;
 
-map<string, XftFont*> fonts;
-map<string, Color> colors;
+map<StyleAttribute, string> style = DEFAULT_STYLE;
+
+map<StyleAttribute, XftFont*> fonts;
+map<StyleAttribute, Color> colors;
 
 Display *display;
 int screen;
@@ -134,10 +146,10 @@ auto lastBlink = std::chrono::system_clock::now();
 void renderTextInput (const bool showCursor) {
 	lastBlink = std::chrono::system_clock::now();
 	int ty = 0.66 * ROW_HEIGHT * 1.25;
-	int cursorX = renderText(14, ty, query.substr(0, cursor), fonts["large"], colors["background"]); // invisible text just to figure out cursor position
-	XSetForeground(display, gc, showCursor ? colors["title"].x : colors["background"].x);
+	int cursorX = renderText(14, ty, query.substr(0, cursor), fonts[large], colors[background]); // invisible text just to figure out cursor position
+	XSetForeground(display, gc, showCursor ? colors[title].x : colors[background].x);
 	XFillRectangle(display, window, gc, cursorX, ROW_HEIGHT * 1.25 / 4, 3, ROW_HEIGHT * 1.25 / 2);
-	renderText(14, ty, query, fonts["large"], colors["title"]);
+	renderText(14, ty, query, fonts[large], colors[title]);
 	cursorVisible = showCursor;
 }
 
@@ -159,7 +171,7 @@ void render () {
 	XMoveResizeWindow(display, window, x, 200, width, height);
 	XClearWindow(display, window);
 	renderTextInput(true);
-	XSetForeground(display, gc, colors["highlight"].x);
+	XSetForeground(display, gc, colors[highlight].x);
 	XSetLineAttributes(display, gc, LINE_WIDTH, LineSolid, CapButt, JoinRound);
 	XDrawRectangle(display, window, gc, 0, 0, width - 1, ROW_HEIGHT * 1.25);
 	XDrawRectangle(display, window, gc, 0, ROW_HEIGHT * 1.25 - 1, width - 1, resultCount * ROW_HEIGHT - 1);
@@ -168,7 +180,7 @@ void render () {
 		const Result result = results[i];
 		const string d = result.app->name + " - " + result.app->genericName + result.app->comment;
 		if (i == selected) {
-			XSetForeground(display, gc, colors["highlight"].x);
+			XSetForeground(display, gc, colors[highlight].x);
 			XFillRectangle(display, window, gc, 0, (i + 1.25) * ROW_HEIGHT, width, ROW_HEIGHT);
 		}
 		
@@ -176,27 +188,27 @@ void render () {
 		int x = 14;
 		int namei = lowercase(result.app->name).find(queryi);
 		if (namei == string::npos) {
-			x = renderText(x, y, result.app->name.c_str(), fonts["regular"], colors["title"]);
+			x = renderText(x, y, result.app->name.c_str(), fonts[regular], colors[title]);
 		} else {
 			string str = result.app->name.substr(0, namei);
-			x = renderText(x, y, str.c_str(), fonts["regular"], colors["title"]);
+			x = renderText(x, y, str.c_str(), fonts[regular], colors[title]);
 			str = result.app->name.substr(namei, query.length());
-			x = renderText(x, y, str.c_str(), fonts["bold"], colors["match"]);
+			x = renderText(x, y, str.c_str(), fonts[bold], colors[match]);
 			str = result.app->name.substr(namei + query.length());
-			x = renderText(x, y, str.c_str(), fonts["regular"], colors["title"]);
+			x = renderText(x, y, str.c_str(), fonts[regular], colors[title]);
 		}
 
 		x += 8;
 		int commenti = lowercase(result.app->comment).find(queryi);
 		if (commenti == string::npos) {
-			renderText(x, y, result.app->comment.c_str(), fonts["smallregular"], colors["comment"]);
+			renderText(x, y, result.app->comment.c_str(), fonts[smallregular], colors[comment]);
 		} else {
 			string str = result.app->comment.substr(0, commenti);
-			x = renderText(x, y, str.c_str(), fonts["smallregular"], colors["comment"]);
+			x = renderText(x, y, str.c_str(), fonts[smallregular], colors[comment]);
 			str = result.app->comment.substr(commenti, query.length());
-			x = renderText(x, y, str.c_str(), fonts["smallbold"], colors["comment"]);
+			x = renderText(x, y, str.c_str(), fonts[smallbold], colors[comment]);
 			str = result.app->comment.substr(commenti + query.length());
-			renderText(x, y, str.c_str(), fonts["smallregular"], colors["comment"]);
+			renderText(x, y, str.c_str(), fonts[smallregular], colors[comment]);
 		}
 	}
 }
@@ -207,14 +219,14 @@ void readConfig () {
 	ifstream infile(CONFIG);
 	string line;
 	while (getline(infile, line)) {
-		int i = line.find_last_of("=");
+		const int i = line.find_last_of("=");
 		if (i == string::npos) { continue; }
-		string key = line.substr(0, i);
-		string val = line.substr(i + 1);
+		const string key = line.substr(0, i);
+		const string val = line.substr(i + 1);
 		if (key.find("/") == string::npos) {
-			for (string attr : STYLE_ATTRIBUTES) {
+			for (const auto &[type, attr] : STYLE_ATTRIBUTES) {
 				if (key == attr) {
-					style[attr] = val;
+					style[type] = val;
 					break;
 				}
 			}
@@ -233,13 +245,13 @@ void writeConfig () {
 	ofstream outfile;
 	outfile.open(CONFIG);
 	outfile << "[Style]\n";
-	for (string attr : STYLE_ATTRIBUTES) {
-		if (style[attr] != DEFAULT_STYLE[attr]) {
-			outfile << attr << "=" << style[attr] << "\n";
+	for (const auto &[type, attr] : STYLE_ATTRIBUTES) {
+		if (style[type] != DEFAULT_STYLE[type]) {
+			outfile << STYLE_ATTRIBUTES[type] << "=" << style[type] << "\n";
 		}
 	}
 	outfile << "\n[Application Launch Counts]\n";
-	for (Application app : applications) {
+	for (const Application &app : applications) {
 		if (app.count > 0) {
 			outfile << app.id << "=" << app.count << "\n";
 		}
@@ -251,9 +263,9 @@ void getApplications () {
 	for (const string &dir : APP_DIRS) {
 		struct stat info;
 		if (stat(dir.c_str(), &info) == 0) {
-			for (auto & p : fs::directory_iterator(dir)) {
+			for (const auto &entry : fs::directory_iterator(dir)) {
 				Application app = {};
-				app.id = p.path();
+				app.id = entry.path();
 				ifstream infile(app.id);
 				string line;
 				while (getline(infile, line)) {
@@ -301,11 +313,11 @@ void setProperty (const char *property, const char *value) {
 	XChangeProperty(display, window, propertyAtom, XA_ATOM, 32, PropModeReplace, (unsigned char *) &valueAtom, 1);
 }
 
-void launch (Application *app) {
-	int pid = fork(); // this duplicates the launcher process
+void launch (Application &app) {
+	const int pid = fork(); // this duplicates the launcher process
 	if (pid == 0) { // if this is the child process, replace it with the application
 		chdir(HOME_DIR.c_str());
-		stringstream ss(app->cmd);
+		stringstream ss(app.cmd);
 		vector<char*> args;
 		string arg;
 		while (getline(ss, arg, ' ')) {
@@ -318,7 +330,7 @@ void launch (Application *app) {
 		char **command = &args[0];
 		execvp(command[0], command);
 	} else {
-		app->count++;
+		app.count++;
 		writeConfig();
 	}
 	exit(0);
@@ -333,7 +345,7 @@ void onKeyPress (XEvent &event) {
 			exit(0);
 			break;
 		case XK_Return:
-			launch(results[selected].app);
+			launch(*results[selected].app);
 			break;
 		case XK_Up:
 			selected = selected > 0 ? selected - 1 : results.size() - 1;
@@ -394,20 +406,15 @@ int main () {
 	Colormap colormap = DefaultColormap(display, screen);
 	int depth = DefaultDepth(display, screen);
 
-	defineColor(visual, colormap, colors["title"], style["title"]);
-	defineColor(visual, colormap, colors["comment"], style["comment"]);
-	defineColor(visual, colormap, colors["background"], style["background"]);
-	defineColor(visual, colormap, colors["highlight"], style["highlight"]);
-	defineColor(visual, colormap, colors["match"], style["match"]);
-
-	fonts["regular"] = XftFontOpenName(display, screen, style["regular"].c_str());
-	fonts["bold"] = XftFontOpenName(display, screen, style["bold"].c_str());
-	fonts["smallregular"] = XftFontOpenName(display, screen, style["smallregular"].c_str());
-	fonts["smallbold"] = XftFontOpenName(display, screen, style["smallbold"].c_str());
-	fonts["large"] = XftFontOpenName(display, screen, style["large"].c_str());
+	for (const StyleAttribute c : COLORS) {
+		defineColor(visual, colormap, colors[c], style[c]);
+	}
+	for (const StyleAttribute c : FONTS) {
+		fonts[c] = XftFontOpenName(display, screen, style[c].c_str());
+	}
 
 	XSetWindowAttributes attributes;
-	attributes.background_pixel = colors["background"].x;
+	attributes.background_pixel = colors[background].x;
 
 	window = XCreateWindow(display, XRootWindow(display, screen),
 		-100, -100, 100, 100,

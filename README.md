@@ -1,6 +1,6 @@
 # Proto-Launcher
 
-Minimalist and tiny (<100KB) application launcher for Linux. Built in C++ with X11.
+Minimalist and tiny (\~100KB) application launcher for Linux. Built in C++ with X11.
 
 ![screenshot from 2018-11-25 22-40-40-min](https://user-images.githubusercontent.com/1085434/48985784-ad549e80-f103-11e8-9187-0261f25c6137.png)
 
