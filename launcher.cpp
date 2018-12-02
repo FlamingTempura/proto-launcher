@@ -460,6 +460,9 @@ map<StyleAttribute, string> getStyle () {
 void updateFonts () {
 	map<StyleAttribute, string> style = getStyle();
 	for (const StyleAttribute c : FONTS) {
+		if (fonts.find(c) != fonts.end()) {
+			XftFontClose(display, fonts[c]);
+		}
 		string name = style[c];
 		int i = name.find("-");
 		if (i > 0) {
