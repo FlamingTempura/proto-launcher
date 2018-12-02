@@ -56,6 +56,10 @@ large=Ubuntu,sans-20:light
 
 Colors must be 6-digit hexidecimal strings prefixed with a hash (e.g. `#ff0000`). Fonts must be written as `<families>-<size>:<options>` (e.g. `verdana-10:italic`). For more examples see the [fontconfig docs](https://www.freedesktop.org/software/fontconfig/fontconfig-user.html#AEN36).
 
+## Scaling
+
+Use `F6` and `Shift`+`F6` to adjust the scale of the launcher.
+
 ## Uninstall
 
 ```sh

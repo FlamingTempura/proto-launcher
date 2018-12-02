@@ -42,7 +42,9 @@ struct Result {
 const    int ROW_HEIGHT    = 72;
 const    int INPUT_HEIGHT  = 1.25 * ROW_HEIGHT;
 const    int TEXT_OFFSET   = 0.63 * ROW_HEIGHT;
-const    int LINE_WIDTH    = 6;
+const    int BORDER_WIDTH    = 6;
+const int INDENT = 14;
+const int COMMENT_SPACE = 8;
 const string HOME_DIR      = getenv("HOME")            != NULL ? getenv("HOME")            : getpwuid(getuid())->pw_dir;
 const string CONFIG_DIR    = getenv("XDG_CONFIG_HOME") != NULL ? getenv("XDG_CONFIG_HOME") : HOME_DIR + "/.config";
 const string DATA_DIR      = getenv("XDG_DATA_HOME")   != NULL ? getenv("XDG_DATA_HOME")   : HOME_DIR + "/.local/share";
@@ -184,6 +186,8 @@ int cursor = 0;
 bool cursorVisible = false;
 int width;
 int theme = 0;
+float scaleFactor = 1.0f;
+int inputHeight, rowHeight, textOffset, borderWidth, indent, commentSpace;
 XSetWindowAttributes attributes;
 vector<Application> applications;
 vector<Result> results;
@@ -238,17 +242,17 @@ void search () {
 auto lastBlink = std::chrono::system_clock::now();
 void renderTextInput (const bool showCursor) {
 	lastBlink = std::chrono::system_clock::now();
-	int ty = 0.66 * INPUT_HEIGHT;
-	XClearArea(display, window, 0, 0, width, INPUT_HEIGHT, false); // clear input area
+	int ty = 0.66 * inputHeight;
+	XClearArea(display, window, 0, 0, width, inputHeight, false); // clear input area
 	XSetForeground(display, gc, colors[C_HIGHLIGHT].pixel); // input border color
-	XSetLineAttributes(display, gc, LINE_WIDTH, LineSolid, CapButt, JoinRound); // input border style
-	XDrawRectangle(display, window, gc, 0, 0, width - 1, INPUT_HEIGHT); // input border
+	XSetLineAttributes(display, gc, borderWidth, LineSolid, CapButt, JoinRound); // input border style
+	XDrawRectangle(display, window, gc, 0, 0, width - 1, inputHeight); // input border
 	if (showCursor) {
 		int cursorX = renderText(14, ty, query.substr(0, cursor), *fonts[F_LARGE], colors[C_BG]); // invisible text just to figure out cursor position
 		XSetForeground(display, gc, showCursor ? colors[C_TITLE].pixel : colors[C_BG].pixel); // cursor color
-		XFillRectangle(display, window, gc, cursorX, INPUT_HEIGHT / 4, 3, INPUT_HEIGHT / 2); // cursor
+		XFillRectangle(display, window, gc, cursorX, inputHeight / 4, 3, inputHeight / 2); // cursor
 	}
-	renderText(14, ty, query, *fonts[F_LARGE], colors[C_TITLE]); // visible input text
+	renderText(INDENT, ty, query, *fonts[F_LARGE], colors[C_TITLE]); // visible input text
 	cursorVisible = showCursor;
 }
 
@@ -263,43 +267,43 @@ void cursorBlink () {
 void renderResults () {
 	int resultCount = results.size();
 
-	XClearArea(display, window, 0, INPUT_HEIGHT, width, resultCount * ROW_HEIGHT, false); // clear results area
+	XClearArea(display, window, 0, inputHeight, width, resultCount * rowHeight, false); // clear results area
 	XSetForeground(display, gc, colors[C_HIGHLIGHT].pixel); // results border color
-	XSetLineAttributes(display, gc, LINE_WIDTH, LineSolid, CapButt, JoinRound); // results border style
-	XDrawRectangle(display, window, gc, 0, INPUT_HEIGHT - 1, width - 1, resultCount * ROW_HEIGHT - 1); // results border
+	XSetLineAttributes(display, gc, borderWidth, LineSolid, CapButt, JoinRound); // results border style
+	XDrawRectangle(display, window, gc, 0, inputHeight - 1, width - 1, resultCount * rowHeight - 1); // results border
 	
 	for (int i = 0; i < resultCount; i++) {
 		const Result result = results[i];
 		const int namei = lowercase(result.app->name).find(queryi);
 		const int commenti = lowercase(result.app->comment).find(queryi);
-		const int y = INPUT_HEIGHT + i * ROW_HEIGHT;
-		int x = 14;
+		const int y = inputHeight + i * rowHeight;
+		int x = indent;
 
 		if (i == selected) {
 			XSetForeground(display, gc, colors[C_HIGHLIGHT].pixel);
-			XFillRectangle(display, window, gc, 0, y, width, ROW_HEIGHT);
+			XFillRectangle(display, window, gc, 0, y, width, rowHeight);
 		}
 		
 		if (namei == string::npos) {
-			x = renderText(x, y + TEXT_OFFSET, result.app->name.c_str(), *fonts[F_REGULAR], colors[C_TITLE]);
+			x = renderText(x, y + textOffset, result.app->name.c_str(), *fonts[F_REGULAR], colors[C_TITLE]);
 		} else {
 			string str = result.app->name.substr(0, namei);
-			x = renderText(x, y + TEXT_OFFSET, str.c_str(), *fonts[F_REGULAR], colors[C_TITLE]);
+			x = renderText(x, y + textOffset, str.c_str(), *fonts[F_REGULAR], colors[C_TITLE]);
 			str = result.app->name.substr(namei, query.length());
-			x = renderText(x, y + TEXT_OFFSET, str.c_str(), *fonts[F_BOLD], colors[C_MATCH]);
+			x = renderText(x, y + textOffset, str.c_str(), *fonts[F_BOLD], colors[C_MATCH]);
 			str = result.app->name.substr(namei + query.length());
-			x = renderText(x, y + TEXT_OFFSET, str.c_str(), *fonts[F_REGULAR], colors[C_TITLE]);
+			x = renderText(x, y + textOffset, str.c_str(), *fonts[F_REGULAR], colors[C_TITLE]);
 		}
 
 		if (commenti == string::npos) {
-			renderText(x + 8, y + TEXT_OFFSET, result.app->comment.c_str(), *fonts[F_SMALLREGULAR], colors[C_COMMENT]);
+			renderText(x + commentSpace, y + textOffset, result.app->comment.c_str(), *fonts[F_SMALLREGULAR], colors[C_COMMENT]);
 		} else {
 			string str = result.app->comment.substr(0, commenti);
-			x = renderText(x + 8, y + TEXT_OFFSET, str.c_str(), *fonts[F_SMALLREGULAR], colors[C_COMMENT]);
+			x = renderText(x + commentSpace, y + textOffset, str.c_str(), *fonts[F_SMALLREGULAR], colors[C_COMMENT]);
 			str = result.app->comment.substr(commenti, query.length());
-			x = renderText(x, y + TEXT_OFFSET, str.c_str(), *fonts[F_SMALLBOLD], colors[C_COMMENT]);
+			x = renderText(x, y + textOffset, str.c_str(), *fonts[F_SMALLBOLD], colors[C_COMMENT]);
 			str = result.app->comment.substr(commenti + query.length());
-			renderText(x, y + TEXT_OFFSET, str.c_str(), *fonts[F_SMALLREGULAR], colors[C_COMMENT]);
+			renderText(x, y + textOffset, str.c_str(), *fonts[F_SMALLREGULAR], colors[C_COMMENT]);
 		}
 	}
 }
@@ -314,7 +318,9 @@ void readConfig () {
 		if (i == string::npos) { continue; }
 		const string key = line.substr(0, i);
 		const string val = line.substr(i + 1);
-		if (key == "theme") {
+		if (key == "scale") {
+			scaleFactor = stof(val);
+		} else if (key == "theme") {
 			int j = 0;
 			for (auto &t : THEMES) {
 				if (t[NAME] == val) {
@@ -341,6 +347,7 @@ void writeConfig () {
 	outfile.open(CONFIG);
 	outfile << "[Style]\n";
 	outfile << "theme=" << THEMES[theme][NAME] << "\n";
+	outfile << "scale=" << scaleFactor << "\n";
 	for (const auto &[type, attr] : STYLE_ATTRIBUTES) {
 		if (STYLE_OVERRIDE.find(type) != STYLE_OVERRIDE.end()) {
 			outfile << STYLE_ATTRIBUTES[type] << "=" << STYLE_OVERRIDE[type] << "\n";
@@ -437,17 +444,39 @@ void launch (Application &app) {
 
 Visual *visual;
 Colormap colormap;
+int windowX;
 
-void updateStyle () {
+map<StyleAttribute, string> getStyle () {
 	map<StyleAttribute, string> style = STYLE_DEFAULTS;
-
 	for (const auto &[type, val] : THEMES[theme]) {
 		style[type] = val;
 	}
-
 	for (const auto &[type, val] : STYLE_OVERRIDE) {
 		style[type] = val;
 	}
+	return style;
+};
+
+void updateFonts () {
+	map<StyleAttribute, string> style = getStyle();
+	for (const StyleAttribute c : FONTS) {
+		string name = style[c];
+		int i = name.find("-");
+		if (i > 0) {
+			int j = name.find(":");
+			string before = name.substr(0, i + 1);
+			string number = name.substr(i + 1, j > 0 ? j - i : string::npos);
+			string after = j > 0 ? name.substr(j, string::npos) : "";
+			int size = stoi(number) * scaleFactor;
+			name = before + std::to_string(size) + after;
+			std::cout << name << "\n";
+		}
+		fonts[c] = XftFontOpenName(display, screen, name.c_str());
+	}
+}
+
+void updateStyle () {
+	map<StyleAttribute, string> style = getStyle();
 
 	for (const StyleAttribute c : COLORS) {
 		unsigned short r = stol(style[c].substr(1, 2), nullptr, 16) * 256;
@@ -457,11 +486,24 @@ void updateStyle () {
 		XftColorAllocValue(display, visual, colormap, &xrcolor, &colors[c]);
 	}
 
-	for (const StyleAttribute c : FONTS) {
-		fonts[c] = XftFontOpenName(display, screen, style[c].c_str());
-	}
+	updateFonts();
 
 	XSetWindowBackground(display, window, colors[C_BG].pixel);
+}
+
+void updateScale () {
+	int screenWidth = DisplayWidth(display, screen);
+	if (scaleFactor < 0.1) { scaleFactor = 0.1; }
+	std::cout << scaleFactor << "\n";
+	inputHeight = scaleFactor * INPUT_HEIGHT;
+	rowHeight = scaleFactor * ROW_HEIGHT;
+	textOffset = scaleFactor * TEXT_OFFSET;
+	borderWidth = scaleFactor * BORDER_WIDTH;
+	indent = scaleFactor * INDENT;
+	commentSpace = scaleFactor * COMMENT_SPACE;
+	width = scaleFactor * screenWidth / 3.4;
+	windowX = screenWidth / 2 - width / 2;
+	updateFonts();
 }
 
 void onKeyPress (XEvent &event) {
@@ -513,6 +555,11 @@ void onKeyPress (XEvent &event) {
 			updateStyle();
 			writeConfig();
 			break;
+		case XK_F6:
+			scaleFactor += event.xkey.state == 1 ? -0.1 : 0.1;
+			updateScale();
+			writeConfig();
+			break;
 		default:
 			if (textlength == 1) { // check it's a character
 				query = query.substr(0, cursor) + text + query.substr(cursor, query.length());
@@ -532,13 +579,12 @@ int main () {
 	visual = DefaultVisual(display, screen);
 	colormap = DefaultColormap(display, screen);
 	int depth = DefaultDepth(display, screen);
-	int screenWidth = DisplayWidth(display, screen);
-	width = screenWidth / 3.4;
-	int x = screenWidth / 2 - width / 2;
 	bool applicationsLoaded = false;
+
+	updateScale();
 	
 	window = XCreateWindow(display, XRootWindow(display, screen),
-		x, 200, width, INPUT_HEIGHT,
+		windowX, 200, width, inputHeight,
 		5, depth, InputOutput, visual, CWBackPixel, &attributes);
 	XSelectInput(display, window, ExposureMask | KeyPressMask | FocusChangeMask);
 	XIM xim = XOpenIM(display, 0, 0, 0);
@@ -570,7 +616,6 @@ int main () {
 			}
 			if (event.type == KeyPress) {
 				onKeyPress(event);
-				renderTextInput(true);
 				if (query.length() > 0) {
 					if (!applicationsLoaded) {
 						applications = awaitApps.get();
@@ -583,7 +628,8 @@ int main () {
 				if (selected >= results.size()) {
 					selected = 0;
 				}
-				XMoveResizeWindow(display, window, x, 200, width, INPUT_HEIGHT + results.size() * ROW_HEIGHT);
+				XMoveResizeWindow(display, window, windowX, 200, width, inputHeight + results.size() * rowHeight);
+				renderTextInput(true);
 				renderResults();
 			}
 			if (event.type == FocusOut) { exit(0); }
