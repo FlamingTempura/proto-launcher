@@ -13,9 +13,10 @@
 #include <X11/Xft/Xft.h> // fonts (requires libxft)
 #include <filesystem> // used for scanning application dirs
 #include <pwd.h> // used to get user home dir
+#include <future>
 
 namespace fs = std::filesystem;
-using std::string, std::map, std::vector, std::ifstream, std::ofstream, std::stringstream;
+using std::string, std::map, std::vector, std::ifstream, std::ofstream, std::stringstream, std::thread, std::promise;
 
 enum StyleAttribute {
 	C_TITLE, C_COMMENT, C_BG, C_HIGHLIGHT, C_MATCH, // colors
@@ -39,6 +40,8 @@ struct Result {
 };
 
 const    int ROW_HEIGHT    = 72;
+const    int INPUT_HEIGHT  = 1.25 * ROW_HEIGHT;
+const    int TEXT_OFFSET   = 0.63 * ROW_HEIGHT;
 const    int LINE_WIDTH    = 6;
 const string HOME_DIR      = getenv("HOME")            != NULL ? getenv("HOME")            : getpwuid(getuid())->pw_dir;
 const string CONFIG_DIR    = getenv("XDG_CONFIG_HOME") != NULL ? getenv("XDG_CONFIG_HOME") : HOME_DIR + "/.config";
@@ -85,6 +88,7 @@ string queryi = ""; // lower case
 int selected = 0;
 int cursor = 0;
 bool cursorVisible = false;
+int width;
 vector<Application> applications;
 vector<Result> results;
 map<StyleAttribute, string> style = DEFAULT_STYLE;
@@ -109,43 +113,47 @@ int renderText(const int x, const int y, string text, XftFont &font, const XftCo
 
 void search () {
 	results = {};
-	if (queryi.length() > 0) {
-		for (Application &app : applications) {
-			int score = 0;
-			int i = 0;
-			for (const Keyword &keyword : app.keywords) {
-				int matchIndex = keyword.word.find(queryi);
-				if (matchIndex != string::npos) {
-					// score determined by:
-					// - apps whose names begin with the query string appear first
-					// - apps whose names or descriptions contain the query string then appear
-					// - apps which hav e been opened most frequently should be prioritised
-					score = (100 - i) * keyword.weight * (matchIndex == 0 ? 10000 : 100) + app.count;
-					break;
-				}
-				i++;
+	for (Application &app : applications) {
+		int score = 0;
+		int i = 0;
+		for (const Keyword &keyword : app.keywords) {
+			int matchIndex = keyword.word.find(queryi);
+			if (matchIndex != string::npos) {
+				// score determined by:
+				// - apps whose names begin with the query string appear first
+				// - apps whose names or descriptions contain the query string then appear
+				// - apps which hav e been opened most frequently should be prioritised
+				score = (100 - i) * keyword.weight * (matchIndex == 0 ? 10000 : 100) + app.count;
+				break;
 			}
-			if (score > 0) {
-				results.push_back({ &app, score });
-			}
+			i++;
 		}
-		sort(results.begin(), results.end(), [](const Result &a, const Result &b) {
-			return b.score < a.score;
-		});
-		if (results.size() > 10) {
-			results.resize(10); // limit to 10 results
+		if (score > 0) {
+			results.push_back({ &app, score });
 		}
+	}
+	sort(results.begin(), results.end(), [](const Result &a, const Result &b) {
+		return b.score < a.score;
+	});
+	if (results.size() > 10) {
+		results.resize(10); // limit to 10 results
 	}
 }
 
 auto lastBlink = std::chrono::system_clock::now();
 void renderTextInput (const bool showCursor) {
 	lastBlink = std::chrono::system_clock::now();
-	int ty = 0.66 * ROW_HEIGHT * 1.25;
-	int cursorX = renderText(14, ty, query.substr(0, cursor), *fonts[F_LARGE], colors[C_BG]); // invisible text just to figure out cursor position
-	XSetForeground(display, gc, showCursor ? colors[C_TITLE].pixel : colors[C_BG].pixel);
-	XFillRectangle(display, window, gc, cursorX, ROW_HEIGHT * 1.25 / 4, 3, ROW_HEIGHT * 1.25 / 2);
-	renderText(14, ty, query, *fonts[F_LARGE], colors[C_TITLE]);
+	int ty = 0.66 * INPUT_HEIGHT;
+	XClearArea(display, window, 0, 0, width, INPUT_HEIGHT, false); // clear input area
+	XSetForeground(display, gc, colors[C_HIGHLIGHT].pixel); // input border color
+	XSetLineAttributes(display, gc, LINE_WIDTH, LineSolid, CapButt, JoinRound); // input border style
+	XDrawRectangle(display, window, gc, 0, 0, width - 1, INPUT_HEIGHT); // input border
+	if (showCursor) {
+		int cursorX = renderText(14, ty, query.substr(0, cursor), *fonts[F_LARGE], colors[C_BG]); // invisible text just to figure out cursor position
+		XSetForeground(display, gc, showCursor ? colors[C_TITLE].pixel : colors[C_BG].pixel); // cursor color
+		XFillRectangle(display, window, gc, cursorX, INPUT_HEIGHT / 4, 3, INPUT_HEIGHT / 2); // cursor
+	}
+	renderText(14, ty, query, *fonts[F_LARGE], colors[C_TITLE]); // visible input text
 	cursorVisible = showCursor;
 }
 
@@ -157,54 +165,46 @@ void cursorBlink () {
 	}
 }
 
-void render () {
+void renderResults () {
 	int resultCount = results.size();
-	int screenWidth = DisplayWidth(display, screen);
-	int width = screenWidth / 3.4;
-	int x = screenWidth / 2 - width / 2;
-	int height = (resultCount + 1.25) * ROW_HEIGHT;
 
-	XMoveResizeWindow(display, window, x, 200, width, height);
-	XClearWindow(display, window);
-	renderTextInput(true);
-	XSetForeground(display, gc, colors[C_HIGHLIGHT].pixel);
-	XSetLineAttributes(display, gc, LINE_WIDTH, LineSolid, CapButt, JoinRound);
-	XDrawRectangle(display, window, gc, 0, 0, width - 1, ROW_HEIGHT * 1.25);
-	XDrawRectangle(display, window, gc, 0, ROW_HEIGHT * 1.25 - 1, width - 1, resultCount * ROW_HEIGHT - 1);
+	XClearArea(display, window, 0, INPUT_HEIGHT, width, resultCount * ROW_HEIGHT, false); // clear results area
+	XSetForeground(display, gc, colors[C_HIGHLIGHT].pixel); // results border color
+	XSetLineAttributes(display, gc, LINE_WIDTH, LineSolid, CapButt, JoinRound); // results border style
+	XDrawRectangle(display, window, gc, 0, INPUT_HEIGHT - 1, width - 1, resultCount * ROW_HEIGHT - 1); // results border
 	
 	for (int i = 0; i < resultCount; i++) {
 		const Result result = results[i];
-		const string d = result.app->name + " - " + result.app->genericName + result.app->comment;
+		const int namei = lowercase(result.app->name).find(queryi);
+		const int commenti = lowercase(result.app->comment).find(queryi);
+		const int y = INPUT_HEIGHT + i * ROW_HEIGHT;
+		int x = 14;
+
 		if (i == selected) {
 			XSetForeground(display, gc, colors[C_HIGHLIGHT].pixel);
-			XFillRectangle(display, window, gc, 0, (i + 1.25) * ROW_HEIGHT, width, ROW_HEIGHT);
+			XFillRectangle(display, window, gc, 0, y, width, ROW_HEIGHT);
 		}
 		
-		int y = (i + 1.25) * ROW_HEIGHT + 0.63 * ROW_HEIGHT;
-		int x = 14;
-		int namei = lowercase(result.app->name).find(queryi);
 		if (namei == string::npos) {
-			x = renderText(x, y, result.app->name.c_str(), *fonts[F_REGULAR], colors[C_TITLE]);
+			x = renderText(x, y + TEXT_OFFSET, result.app->name.c_str(), *fonts[F_REGULAR], colors[C_TITLE]);
 		} else {
 			string str = result.app->name.substr(0, namei);
-			x = renderText(x, y, str.c_str(), *fonts[F_REGULAR], colors[C_TITLE]);
+			x = renderText(x, y + TEXT_OFFSET, str.c_str(), *fonts[F_REGULAR], colors[C_TITLE]);
 			str = result.app->name.substr(namei, query.length());
-			x = renderText(x, y, str.c_str(), *fonts[F_BOLD], colors[C_MATCH]);
+			x = renderText(x, y + TEXT_OFFSET, str.c_str(), *fonts[F_BOLD], colors[C_MATCH]);
 			str = result.app->name.substr(namei + query.length());
-			x = renderText(x, y, str.c_str(), *fonts[F_REGULAR], colors[C_TITLE]);
+			x = renderText(x, y + TEXT_OFFSET, str.c_str(), *fonts[F_REGULAR], colors[C_TITLE]);
 		}
 
-		x += 8;
-		int commenti = lowercase(result.app->comment).find(queryi);
 		if (commenti == string::npos) {
-			renderText(x, y, result.app->comment.c_str(), *fonts[F_SMALLREGULAR], colors[C_COMMENT]);
+			renderText(x + 8, y + TEXT_OFFSET, result.app->comment.c_str(), *fonts[F_SMALLREGULAR], colors[C_COMMENT]);
 		} else {
 			string str = result.app->comment.substr(0, commenti);
-			x = renderText(x, y, str.c_str(), *fonts[F_SMALLREGULAR], colors[C_COMMENT]);
+			x = renderText(x + 8, y + TEXT_OFFSET, str.c_str(), *fonts[F_SMALLREGULAR], colors[C_COMMENT]);
 			str = result.app->comment.substr(commenti, query.length());
-			x = renderText(x, y, str.c_str(), *fonts[F_SMALLBOLD], colors[C_COMMENT]);
+			x = renderText(x, y + TEXT_OFFSET, str.c_str(), *fonts[F_SMALLBOLD], colors[C_COMMENT]);
 			str = result.app->comment.substr(commenti + query.length());
-			renderText(x, y, str.c_str(), *fonts[F_SMALLREGULAR], colors[C_COMMENT]);
+			renderText(x, y + TEXT_OFFSET, str.c_str(), *fonts[F_SMALLREGULAR], colors[C_COMMENT]);
 		}
 	}
 }
@@ -246,7 +246,7 @@ void writeConfig () {
 			outfile << STYLE_ATTRIBUTES[type] << "=" << style[type] << "\n";
 		}
 	}
-	outfile << "\n[Application Launch Counts]\n";
+	outfile << "\n[Launches]\n";
 	for (const Application &app : applications) {
 		if (app.count > 0) {
 			outfile << app.id << "=" << app.count << "\n";
@@ -255,7 +255,8 @@ void writeConfig () {
 	outfile.close();
 }
 
-void getApplications () {
+vector<Application> getApplications () {
+	vector<Application> applications;
 	for (const string &dir : APP_DIRS) {
 		struct stat info;
 		if (stat(dir.c_str(), &info) != 0) { continue; }
@@ -300,6 +301,7 @@ void getApplications () {
 			applications.push_back(app);
 		}
 	}
+	return applications;
 }
 
 void setProperty (const char *property, const char *value) {
@@ -381,7 +383,7 @@ void onKeyPress (XEvent &event) {
 }
 
 int main () {
-	getApplications();
+	auto awaitApps = async(getApplications); // prepare list of apps in the background
 	readConfig();
 
 	display = XOpenDisplay(NULL);
@@ -389,6 +391,10 @@ int main () {
 	Visual *visual = DefaultVisual(display, screen);
 	Colormap colormap = DefaultColormap(display, screen);
 	int depth = DefaultDepth(display, screen);
+	int screenWidth = DisplayWidth(display, screen);
+	width = screenWidth / 3.4;
+	int x = screenWidth / 2 - width / 2;
+	bool applicationsLoaded = false;
 
 	for (const StyleAttribute c : COLORS) {
 		unsigned short r = stol(style[c].substr(1, 2), nullptr, 16) * 256;
@@ -406,7 +412,7 @@ int main () {
 	attributes.background_pixel = colors[C_BG].pixel;
 
 	window = XCreateWindow(display, XRootWindow(display, screen),
-		-100, -100, 100, 100,
+		x, 200, width, INPUT_HEIGHT,
 		5, depth, InputOutput, visual, CWBackPixel, &attributes);
 	XSelectInput(display, window, ExposureMask | KeyPressMask | FocusChangeMask);
 	XIM xim = XOpenIM(display, 0, 0, 0);
@@ -430,13 +436,30 @@ int main () {
 	XEvent event;
 	while (1) {
 		while (XCheckMaskEvent(display, ExposureMask | KeyPressMask | FocusChangeMask, &event)) {
-			if (event.type == KeyPress) { onKeyPress(event); }
-			if (event.type == FocusOut) { exit(0); }
-			search();
-			if (selected >= results.size()) {
-				selected = 0;
+			if (event.type == Expose) {
+				renderTextInput(true);
+				renderResults();
 			}
-			render();
+			if (event.type == KeyPress) {
+				onKeyPress(event);
+				renderTextInput(true);
+				if (query.length() > 0) {
+					if (!applicationsLoaded) {
+						applications = awaitApps.get();
+						readConfig(); // read the config again, this time getting app count data
+						applicationsLoaded = true;
+					}
+					search();
+				} else {
+					results = {};
+				}
+				if (selected >= results.size()) {
+					selected = 0;
+				}
+				XMoveResizeWindow(display, window, x, 200, width, INPUT_HEIGHT + results.size() * ROW_HEIGHT);
+				renderResults();
+			}
+			if (event.type == FocusOut) { exit(0); }
 		}
 		cursorBlink();
 		std::this_thread::sleep_for(std::chrono::milliseconds(10));
