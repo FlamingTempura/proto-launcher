@@ -12,9 +12,10 @@
 #include <X11/Xft/Xft.h> // fonts (requires libxft)
 #include <filesystem> // used for scanning application dirs
 #include <pwd.h> // used to get user home dir
+#include <map>
 
 namespace fs = std::filesystem;
-using std::string, std::vector, std::ifstream, std::ofstream, std::stringstream;
+using std::string, std::map, std::vector, std::ifstream, std::ofstream, std::stringstream;
 
 struct Keyword {
 	string word;
@@ -37,33 +38,49 @@ struct Color {
 	XftColor xft;
 };
 
-struct Style {
-	Color title, comment, background, highlight, match;
-	XftFont *regular, *bold, *smallRegular, *smallBold, *large;
-};
-
 const    int ROW_HEIGHT    = 72;
 const    int LINE_WIDTH    = 6;
-const string BACKGROUND    = "#ffffff";
-const string HIGHLIGHT     = "#f8c291";
-const string TITLE         = "#111111";
-const string COMMENT       = "#999999";
-const string MATCH         = "#111111";
-const string REGULAR       = "Ubuntu,sans-11";
-const string BOLD          = "Ubuntu,sans-11:bold";
-const string SMALL_REGULAR = "Ubuntu,sans-10";
-const string SMALL_BOLD    = "Ubuntu,sans-10:bold";
-const string LARGE         = "Ubuntu,sans-20:light";
 const string HOME_DIR      = getenv("HOME")            != NULL ? getenv("HOME")            : getpwuid(getuid())->pw_dir;
 const string CONFIG_DIR    = getenv("XDG_CONFIG_HOME") != NULL ? getenv("XDG_CONFIG_HOME") : HOME_DIR + "/.config";
 const string DATA_DIR      = getenv("XDG_DATA_HOME")   != NULL ? getenv("XDG_DATA_HOME")   : HOME_DIR + "/.local/share";
 const string CONFIG        = CONFIG_DIR + "/launcher.conf";
 const string APP_DIRS[]    = { "/usr/share/applications", "/usr/local/share/applications", DATA_DIR + "/applications" };
 
+enum StyleType { title, comment, background, highlight, match, regular, bold, smallregular, smallbold, large };
+
+map<StyleType, string> STYLE_ATTRIBUTES = {
+	{ title, "title" },
+	{ comment, "comment" },
+	{ background, "background" },
+	{ highlight, "highlight" },
+	{ match, "match" },
+	{ regular, "regular" },
+	{ bold, "bold" },
+	{ smallregular, "smallregular" },
+	{ smallbold, "smallbold" },
+	{ large, "large" }
+};
+
+map<StyleType, string> DEFAULT_STYLE = {
+	{ title, "#111111" },
+	{ comment, "#999999" },
+	{ background, "#ffffff" },
+	{ highlight, "#f8c291" },
+	{ match, "#111111" },
+	{ regular, "Ubuntu,sans-11" },
+	{ bold, "Ubuntu,sans-11:bold" },
+	{ smallregular, "Ubuntu,sans-10" },
+	{ smallbold, "Ubuntu,sans-10:bold" },
+	{ large, "Ubuntu,sans-20:light" }
+};
+map<StyleType, string> style = DEFAULT_STYLE;
+
+map<StyleType, XftFont*> fonts;
+map<StyleType, Color> colors;
+
 Display *display;
 int screen;
 Window window;
-Style style;
 GC gc;
 XIC xic;
 string query = "";
@@ -74,16 +91,6 @@ bool cursorVisible = false;
 vector<Application> applications;
 XftDraw *xftdraw;
 vector<Result> results;
-string backgroundColor = BACKGROUND;
-string highlightColor = HIGHLIGHT;
-string titleColor = TITLE;
-string commentColor = COMMENT;
-string matchColor = MATCH;
-string regularFont = REGULAR;
-string boldFont = BOLD;
-string smallRegularFont = SMALL_REGULAR;
-string smallBoldFont = SMALL_BOLD;
-string largeFont = LARGE;
 
 string lowercase (const string &str) {
 	string out = str;
@@ -136,10 +143,10 @@ auto lastBlink = std::chrono::system_clock::now();
 void renderTextInput (const bool showCursor) {
 	lastBlink = std::chrono::system_clock::now();
 	int ty = 0.66 * ROW_HEIGHT * 1.25;
-	int cursorX = renderText(14, ty, query.substr(0, cursor), style.large, style.background); // invisible text just to figure out cursor position
-	XSetForeground(display, gc, showCursor ? style.title.x : style.background.x);
+	int cursorX = renderText(14, ty, query.substr(0, cursor), fonts[large], colors[background]); // invisible text just to figure out cursor position
+	XSetForeground(display, gc, showCursor ? colors[title].x : colors[background].x);
 	XFillRectangle(display, window, gc, cursorX, ROW_HEIGHT * 1.25 / 4, 3, ROW_HEIGHT * 1.25 / 2);
-	renderText(14, ty, query, style.large, style.title);
+	renderText(14, ty, query, fonts[large], colors[title]);
 	cursorVisible = showCursor;
 }
 
@@ -161,7 +168,7 @@ void render () {
 	XMoveResizeWindow(display, window, x, 200, width, height);
 	XClearWindow(display, window);
 	renderTextInput(true);
-	XSetForeground(display, gc, style.highlight.x);
+	XSetForeground(display, gc, colors[highlight].x);
 	XSetLineAttributes(display, gc, LINE_WIDTH, LineSolid, CapButt, JoinRound);
 	XDrawRectangle(display, window, gc, 0, 0, width - 1, ROW_HEIGHT * 1.25);
 	XDrawRectangle(display, window, gc, 0, ROW_HEIGHT * 1.25 - 1, width - 1, resultCount * ROW_HEIGHT - 1);
@@ -170,7 +177,7 @@ void render () {
 		const Result result = results[i];
 		const string d = result.app->name + " - " + result.app->genericName + result.app->comment;
 		if (i == selected) {
-			XSetForeground(display, gc, style.highlight.x);
+			XSetForeground(display, gc, colors[highlight].x);
 			XFillRectangle(display, window, gc, 0, (i + 1.25) * ROW_HEIGHT, width, ROW_HEIGHT);
 		}
 		
@@ -178,27 +185,27 @@ void render () {
 		int x = 14;
 		int namei = lowercase(result.app->name).find(queryi);
 		if (namei == string::npos) {
-			x = renderText(x, y, result.app->name.c_str(), style.regular, style.title);
+			x = renderText(x, y, result.app->name.c_str(), fonts[regular], colors[title]);
 		} else {
 			string str = result.app->name.substr(0, namei);
-			x = renderText(x, y, str.c_str(), style.regular, style.title);
+			x = renderText(x, y, str.c_str(), fonts[regular], colors[title]);
 			str = result.app->name.substr(namei, query.length());
-			x = renderText(x, y, str.c_str(), style.bold, style.match);
+			x = renderText(x, y, str.c_str(), fonts[bold], colors[match]);
 			str = result.app->name.substr(namei + query.length());
-			x = renderText(x, y, str.c_str(), style.regular, style.title);
+			x = renderText(x, y, str.c_str(), fonts[regular], colors[title]);
 		}
 
 		x += 8;
 		int commenti = lowercase(result.app->comment).find(queryi);
 		if (commenti == string::npos) {
-			renderText(x, y, result.app->comment.c_str(), style.smallRegular, style.comment);
+			renderText(x, y, result.app->comment.c_str(), fonts[smallregular], colors[comment]);
 		} else {
 			string str = result.app->comment.substr(0, commenti);
-			x = renderText(x, y, str.c_str(), style.smallRegular, style.comment);
+			x = renderText(x, y, str.c_str(), fonts[smallregular], colors[comment]);
 			str = result.app->comment.substr(commenti, query.length());
-			x = renderText(x, y, str.c_str(), style.smallBold, style.comment);
+			x = renderText(x, y, str.c_str(), fonts[smallbold], colors[comment]);
 			str = result.app->comment.substr(commenti + query.length());
-			renderText(x, y, str.c_str(), style.smallRegular, style.comment);
+			renderText(x, y, str.c_str(), fonts[smallregular], colors[comment]);
 		}
 	}
 }
@@ -213,17 +220,14 @@ void readConfig () {
 		if (i == string::npos) { continue; }
 		string key = line.substr(0, i);
 		string val = line.substr(i + 1);
-		if (key == "title")        { titleColor = val; }       else
-		if (key == "comment")      { commentColor = val; }     else
-		if (key == "background")   { backgroundColor = val; }  else
-		if (key == "highlight")    { highlightColor = val; }   else
-		if (key == "match")        { matchColor = val; }       else
-		if (key == "regular")      { regularFont = val; }      else
-		if (key == "bold")         { boldFont = val; }         else
-		if (key == "smallregular") { smallRegularFont = val; } else
-		if (key == "smallbold")    { smallBoldFont = val; }    else
-		if (key == "large")        { largeFont = val; }
-		else {
+		if (key.find("/") == string::npos) {
+			for (auto const& [type, attr] : STYLE_ATTRIBUTES) {
+				if (key == attr) {
+					style[type] = val;
+					break;
+				}
+			}
+		} else {
 			for (Application &app : applications) {
 				if (app.id == key) {
 					app.count = stoi(val);
@@ -238,16 +242,11 @@ void writeConfig () {
 	ofstream outfile;
 	outfile.open(CONFIG);
 	outfile << "[Style]\n";
-	if (titleColor       != TITLE)         { outfile << "title="        << titleColor       << "\n"; }
-	if (commentColor     != COMMENT)       { outfile << "comment="      << commentColor     << "\n"; }
-	if (matchColor       != MATCH)         { outfile << "match="        << matchColor       << "\n"; }
-	if (backgroundColor  != BACKGROUND)    { outfile << "background="   << backgroundColor  << "\n"; }
-	if (highlightColor   != HIGHLIGHT)     { outfile << "highlight="    << highlightColor   << "\n"; }
-	if (regularFont      != REGULAR)       { outfile << "regular="      << regularFont      << "\n"; }
-	if (boldFont         != BOLD)          { outfile << "bold="         << boldFont         << "\n"; }
-	if (smallRegularFont != SMALL_REGULAR) { outfile << "smallregular=" << smallRegularFont << "\n"; }
-	if (smallBoldFont    != SMALL_BOLD)    { outfile << "smallbold="    << smallBoldFont    << "\n"; }
-	if (largeFont        != LARGE)         { outfile << "large="        << largeFont        << "\n"; }
+	for (auto const& [type, attr] : STYLE_ATTRIBUTES) {
+		if (style[type] != DEFAULT_STYLE[type]) {
+			outfile << STYLE_ATTRIBUTES[type] << "=" << style[type] << "\n";
+		}
+	}
 	outfile << "\n[Application Launch Counts]\n";
 	for (Application app : applications) {
 		if (app.count > 0) {
@@ -404,20 +403,20 @@ int main () {
 	Colormap colormap = DefaultColormap(display, screen);
 	int depth = DefaultDepth(display, screen);
 
-	defineColor(visual, colormap, style.title, titleColor);
-	defineColor(visual, colormap, style.comment, commentColor);
-	defineColor(visual, colormap, style.background, backgroundColor);
-	defineColor(visual, colormap, style.highlight, highlightColor);
-	defineColor(visual, colormap, style.match, matchColor);
+	defineColor(visual, colormap, colors[title], style[title]);
+	defineColor(visual, colormap, colors[comment], style[comment]);
+	defineColor(visual, colormap, colors[background], style[background]);
+	defineColor(visual, colormap, colors[highlight], style[highlight]);
+	defineColor(visual, colormap, colors[match], style[match]);
 
-	style.regular = XftFontOpenName(display, screen, regularFont.c_str());
-	style.bold = XftFontOpenName(display, screen, boldFont.c_str());
-	style.smallRegular = XftFontOpenName(display, screen, smallRegularFont.c_str());
-	style.smallBold = XftFontOpenName(display, screen, smallBoldFont.c_str());
-	style.large = XftFontOpenName(display, screen, largeFont.c_str());
+	fonts[regular] = XftFontOpenName(display, screen, style[regular].c_str());
+	fonts[bold] = XftFontOpenName(display, screen, style[bold].c_str());
+	fonts[smallregular] = XftFontOpenName(display, screen, style[smallregular].c_str());
+	fonts[smallbold] = XftFontOpenName(display, screen, style[smallbold].c_str());
+	fonts[large] = XftFontOpenName(display, screen, style[large].c_str());
 
 	XSetWindowAttributes attributes;
-	attributes.background_pixel = style.background.x;
+	attributes.background_pixel = colors[background].x;
 
 	window = XCreateWindow(display, XRootWindow(display, screen),
 		-100, -100, 100, 100,
