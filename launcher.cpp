@@ -248,11 +248,11 @@ void renderTextInput (const bool showCursor) {
 	XSetLineAttributes(display, gc, borderWidth, LineSolid, CapButt, JoinRound); // input border style
 	XDrawRectangle(display, window, gc, 0, 0, width - 1, inputHeight); // input border
 	if (showCursor) {
-		int cursorX = renderText(14, ty, query.substr(0, cursor), *fonts[F_LARGE], colors[C_BG]); // invisible text just to figure out cursor position
+		int cursorX = renderText(indent * 1.3, ty, query.substr(0, cursor), *fonts[F_LARGE], colors[C_BG]); // invisible text just to figure out cursor position
 		XSetForeground(display, gc, showCursor ? colors[C_TITLE].pixel : colors[C_BG].pixel); // cursor color
 		XFillRectangle(display, window, gc, cursorX, inputHeight / 4, 3, inputHeight / 2); // cursor
 	}
-	renderText(INDENT, ty, query, *fonts[F_LARGE], colors[C_TITLE]); // visible input text
+	renderText(indent, ty, query, *fonts[F_LARGE], colors[C_TITLE]); // visible input text
 	cursorVisible = showCursor;
 }
 
@@ -469,7 +469,6 @@ void updateFonts () {
 			string after = j > 0 ? name.substr(j, string::npos) : "";
 			int size = stoi(number) * scaleFactor;
 			name = before + std::to_string(size) + after;
-			std::cout << name << "\n";
 		}
 		fonts[c] = XftFontOpenName(display, screen, name.c_str());
 	}
@@ -494,7 +493,6 @@ void updateStyle () {
 void updateScale () {
 	int screenWidth = DisplayWidth(display, screen);
 	if (scaleFactor < 0.1) { scaleFactor = 0.1; }
-	std::cout << scaleFactor << "\n";
 	inputHeight = scaleFactor * INPUT_HEIGHT;
 	rowHeight = scaleFactor * ROW_HEIGHT;
 	textOffset = scaleFactor * TEXT_OFFSET;
