@@ -508,6 +508,8 @@ void onKeyPress (XEvent &event) {
 	char text[128] = {0};
 	KeySym keysym;
 	int textlength = Xutf8LookupString(xic, &event.xkey, text, sizeof text, &keysym, NULL);
+	bool shift = event.xkey.state == 1;
+	bool ctrl = event.xkey.state == 4;
 	switch (keysym) {
 		case XK_Escape:
 			exit(0);
@@ -535,17 +537,22 @@ void onKeyPress (XEvent &event) {
 			break;
 		case XK_BackSpace:
 			if (cursor > 0) {
-				query.erase(cursor - 1, 1);
-				cursor--;
+				if (ctrl) {
+					query.erase(0, cursor);
+					cursor = 0;
+				} else {
+					query.erase(cursor - 1, 1);
+					cursor--;
+				}
 			}
 			break;
 		case XK_Delete:
 			if (cursor < query.length()) {
-				query.erase(cursor, 1);
+				query.erase(cursor, ctrl ? query.length() - cursor : 1);
 			}
 			break;
 		case XK_F7:
-			if (event.xkey.state == 1) {
+			if (shift) {
 				theme = theme > 0 ? theme - 1 : THEMES.size() - 1;
 			} else {
 				theme = theme < THEMES.size() - 1 ? theme + 1 : 0;
@@ -559,7 +566,7 @@ void onKeyPress (XEvent &event) {
 			writeConfig();
 			break;
 		default:
-			if (textlength == 1) { // check it's a character
+			if (textlength == 1 && !ctrl) { // check it's a character
 				query = query.substr(0, cursor) + text + query.substr(cursor, query.length());
 				cursor++;
 			}
