@@ -246,10 +246,15 @@ auto lastBlink = std::chrono::system_clock::now();
 void renderTextInput (const bool showCursor) {
 	lastBlink = std::chrono::system_clock::now();
 	int ty = 0.66 * inputHeight;
+	char buffer[256];
+	time_t t = time(NULL);
+	strftime(buffer, sizeof(buffer), "%a %e %b %H:%M", localtime(&t));
+	int clockWidth = renderText(0, 0, buffer, *fonts[F_SMALLREGULAR], colors[C_COMMENT]);
 	XClearArea(display, window, 0, 0, width, inputHeight, false); // clear input area
 	XSetForeground(display, gc, colors[C_HIGHLIGHT].pixel); // input border color
 	XSetLineAttributes(display, gc, borderWidth, LineSolid, CapButt, JoinRound); // input border style
 	XDrawRectangle(display, window, gc, 0, 0, width - 1, inputHeight); // input border
+	renderText(width - clockWidth - indent, ty * 0.92, buffer, *fonts[F_SMALLREGULAR], colors[C_TITLE]);
 	if (showCursor) {
 		int cursorX = renderText(indent * 1.3, ty, query.substr(0, cursor), *fonts[F_LARGE], colors[C_BG]); // invisible text just to figure out cursor position
 		XSetForeground(display, gc, showCursor ? colors[C_TITLE].pixel : colors[C_BG].pixel); // cursor color
@@ -499,7 +504,6 @@ void updateStyle () {
 void updateScale () {
 	int screenWidth = DisplayWidth(display, screen);
 	char *resourceString = XResourceManagerString(display);
-	
 	XrmInitialize(); /* Need to initialize the DB before calling Xrm* functions */
 	XrmDatabase db = XrmGetStringDatabase(resourceString);
 	char *type = NULL;
@@ -511,8 +515,6 @@ void updateScale () {
 		dpi = atof(value.addr);
 	}
 	float dpiScaleFactor = dpi / BASE_DPI;
-	std::cout << screenWidth << "\n";
-	std::cout << scaleFactor << "\n";
 	if (scaleFactor < 0.1) { scaleFactor = 0.1; }
 	float sf = dpiScaleFactor * scaleFactor;
 	inputHeight = sf * INPUT_HEIGHT;
