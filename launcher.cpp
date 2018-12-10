@@ -10,6 +10,7 @@
 #include <X11/Xlib.h> // X11 api
 #include <X11/Xatom.h> // X11 Atoms (for preferences)
 #include <X11/Xutil.h> // used to handle keyboard events
+#include <X11/Xresource.h>
 #include <X11/Xft/Xft.h> // fonts (requires libxft)
 #include <filesystem> // used for scanning application dirs
 #include <pwd.h> // used to get user home dir
@@ -39,10 +40,12 @@ struct Result {
 	int score;
 };
 
-const    int ROW_HEIGHT    = 72;
-const    int INPUT_HEIGHT  = 1.25 * ROW_HEIGHT;
-const    int TEXT_OFFSET   = 0.63 * ROW_HEIGHT;
-const    int BORDER_WIDTH    = 6;
+const int BASE_DPI = 96;
+const float BASE_WIDTH = 0.3f; // width as percentage of screen width
+const int ROW_HEIGHT = 42;
+const int INPUT_HEIGHT = 1.25 * ROW_HEIGHT;
+const int TEXT_OFFSET = 0.63 * ROW_HEIGHT;
+const int BORDER_WIDTH = 3;
 const int INDENT = 14;
 const int COMMENT_SPACE = 8;
 const string HOME_DIR      = getenv("HOME")            != NULL ? getenv("HOME")            : getpwuid(getuid())->pw_dir;
@@ -495,14 +498,37 @@ void updateStyle () {
 
 void updateScale () {
 	int screenWidth = DisplayWidth(display, screen);
+	char *resourceString = XResourceManagerString(display);
+	
+	XrmInitialize(); /* Need to initialize the DB before calling Xrm* functions */
+	XrmDatabase db = XrmGetStringDatabase(resourceString);
+	char *type = NULL;
+	XrmValue value;
+	double dpi = 96.0;
+	if (resourceString && 
+			XrmGetResource(db, "Xft.dpi", "String", &type, &value) == True &&
+			value.addr) {
+		dpi = atof(value.addr);
+	}
+	float dpiScaleFactor = dpi / BASE_DPI;
+	std::cout << screenWidth << "\n";
+	std::cout << scaleFactor << "\n";
 	if (scaleFactor < 0.1) { scaleFactor = 0.1; }
-	inputHeight = scaleFactor * INPUT_HEIGHT;
-	rowHeight = scaleFactor * ROW_HEIGHT;
-	textOffset = scaleFactor * TEXT_OFFSET;
-	borderWidth = scaleFactor * BORDER_WIDTH;
-	indent = scaleFactor * INDENT;
-	commentSpace = scaleFactor * COMMENT_SPACE;
-	width = scaleFactor * screenWidth / 3.4;
+	float sf = dpiScaleFactor * scaleFactor;
+	inputHeight = sf * INPUT_HEIGHT;
+	rowHeight = sf * ROW_HEIGHT;
+	textOffset = sf * TEXT_OFFSET;
+	borderWidth = sf * BORDER_WIDTH;
+	indent = sf * INDENT;
+	commentSpace = sf * COMMENT_SPACE;
+	width = sf * screenWidth * BASE_WIDTH;
+	if (width < 200) {
+		if (screenWidth > 210) {
+			width = 200;
+		} else {
+			width = screenWidth - 10;
+		}
+	}
 	windowX = screenWidth / 2 - width / 2;
 	updateFonts();
 }
