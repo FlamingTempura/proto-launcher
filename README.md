@@ -34,7 +34,7 @@ To use a keyboard combo to open the launcher, configure your desktop environment
 
 ## Color scheme and fonts
 
-Use `F7` and `Shift`+`F7` to cycle through the included color schemes.
+Use `F4` and `F5` to cycle through the included color schemes.
 
 You can override colors and fonts in `~/.config/launcher.conf`. E.g.:
 
@@ -58,7 +58,7 @@ Colors must be 6-digit hexidecimal strings prefixed with a hash (e.g. `#ff0000`)
 
 ## Scaling
 
-Use `F6` and `Shift`+`F6` to adjust the scale of the launcher.
+Use `F6` and `F7` to adjust the scale (zoom) of the launcher. Use `F8` and `F9` to adjust the width.
 
 ## Uninstall
 

@@ -41,7 +41,6 @@ struct Result {
 };
 
 const int BASE_DPI = 96;
-const float BASE_WIDTH = 0.3f; // width as percentage of screen width
 const int ROW_HEIGHT = 42;
 const int INPUT_HEIGHT = 1.25 * ROW_HEIGHT;
 const int TEXT_OFFSET = 0.63 * ROW_HEIGHT;
@@ -188,6 +187,7 @@ int selected = 0;
 int cursor = 0;
 bool cursorVisible = false;
 int width;
+float baseWidth = 0.3f; // width as percentage of screen width
 int theme = 0;
 float scaleFactor = 1.0f;
 int inputHeight, rowHeight, textOffset, borderWidth, indent, commentSpace;
@@ -328,6 +328,8 @@ void readConfig () {
 		const string val = line.substr(i + 1);
 		if (key == "scale") {
 			scaleFactor = stof(val);
+		} else if (key == "width") {
+			baseWidth = stof(val);
 		} else if (key == "theme") {
 			int j = 0;
 			for (auto &t : THEMES) {
@@ -356,6 +358,7 @@ void writeConfig () {
 	outfile << "[Style]\n";
 	outfile << "theme=" << THEMES[theme][NAME] << "\n";
 	outfile << "scale=" << scaleFactor << "\n";
+	outfile << "width=" << baseWidth << "\n";
 	for (const auto &[type, attr] : STYLE_ATTRIBUTES) {
 		if (STYLE_OVERRIDE.find(type) != STYLE_OVERRIDE.end()) {
 			outfile << STYLE_ATTRIBUTES[type] << "=" << STYLE_OVERRIDE[type] << "\n";
@@ -523,7 +526,7 @@ void updateScale () {
 	borderWidth = sf * BORDER_WIDTH;
 	indent = sf * INDENT;
 	commentSpace = sf * COMMENT_SPACE;
-	width = sf * screenWidth * BASE_WIDTH;
+	width = sf * screenWidth * baseWidth;
 	if (width < 200) {
 		if (screenWidth > 210) {
 			width = 200;
@@ -582,8 +585,9 @@ void onKeyPress (XEvent &event) {
 				query.erase(cursor, ctrl ? query.length() - cursor : 1);
 			}
 			break;
-		case XK_F7:
-			if (shift) {
+		case XK_F4: // F4 and F5 for theme
+		case XK_F5:
+			if (keysym == XK_F4) {
 				theme = theme > 0 ? theme - 1 : THEMES.size() - 1;
 			} else {
 				theme = theme < THEMES.size() - 1 ? theme + 1 : 0;
@@ -591,8 +595,19 @@ void onKeyPress (XEvent &event) {
 			updateStyle();
 			writeConfig();
 			break;
-		case XK_F6:
-			scaleFactor += event.xkey.state == 1 ? -0.1 : 0.1;
+		case XK_F6: // F6 and F7 for scaling/zoom
+		case XK_F7:
+			scaleFactor += keysym == XK_F6 ? -0.1f : 0.1f;
+			if (scaleFactor > 6.0f) { scaleFactor = 6.0f; }
+			if (scaleFactor < 0.1f) { scaleFactor = 0.1f; }
+			updateScale();
+			writeConfig();
+			break;
+		case XK_F8: // F8 and F9 for width
+		case XK_F9:
+			baseWidth += keysym == XK_F8 ? -0.01f : 0.01f;
+			if (baseWidth > 1.0f) { baseWidth = 1.0f; }
+			if (baseWidth < 0.05f) { baseWidth = 0.05f; }
 			updateScale();
 			writeConfig();
 			break;
