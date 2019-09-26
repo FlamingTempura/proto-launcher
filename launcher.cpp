@@ -15,6 +15,7 @@
 #include <filesystem> // used for scanning application dirs
 #include <pwd.h> // used to get user home dir
 #include <future>
+#include <X11/extensions/Xrandr.h>
 
 namespace fs = std::filesystem;
 using std::string, std::map, std::vector, std::ifstream, std::ofstream, std::stringstream, std::thread, std::promise;
@@ -177,7 +178,7 @@ map<StyleAttribute, string> STYLE_OVERRIDE = {};
 
 Display *display;
 int screen;
-Window window;
+Window window, root;
 GC gc;
 XIC xic;
 XftDraw *xftdraw;
@@ -455,7 +456,7 @@ void launch (Application &app) {
 
 Visual *visual;
 Colormap colormap;
-int windowX;
+int windowX, windowY;
 
 map<StyleAttribute, string> getStyle () {
 	map<StyleAttribute, string> style = STYLE_DEFAULTS;
@@ -505,7 +506,21 @@ void updateStyle () {
 }
 
 void updateScale () {
-	int screenWidth = DisplayWidth(display, screen);
+	int x, y, throwaway;
+	unsigned m;
+	Window w;
+	XQueryPointer(display, root, &w, &w, &x, &y, &throwaway, &throwaway, &m); // get mouse position 
+	XRRScreenResources *xrrr = XRRGetScreenResources(display, root);
+	XRRCrtcInfo *monitor;
+	int i;
+	int ncrtc = xrrr->ncrtc;
+	for (i = 0; i < ncrtc; ++i) {
+		monitor = XRRGetCrtcInfo(display, xrrr, xrrr->crtcs[i]);
+		if (x >= monitor->x && x < monitor->x + monitor->width &&
+			y >= monitor->y && y < monitor->y + monitor->width) { // find monitor which mouse in on
+			break;
+		}
+	}
 	char *resourceString = XResourceManagerString(display);
 	XrmInitialize(); /* Need to initialize the DB before calling Xrm* functions */
 	XrmDatabase db = XrmGetStringDatabase(resourceString);
@@ -526,15 +541,16 @@ void updateScale () {
 	borderWidth = sf * BORDER_WIDTH;
 	indent = sf * INDENT;
 	commentSpace = sf * COMMENT_SPACE;
-	width = sf * screenWidth * baseWidth;
+	width = sf * monitor->width * baseWidth;
 	if (width < 200) {
-		if (screenWidth > 210) {
+		if (monitor->width > 210) {
 			width = 200;
 		} else {
-			width = screenWidth - 10;
+			width = monitor->width - 10;
 		}
 	}
-	windowX = screenWidth / 2 - width / 2;
+	windowX = monitor->x + monitor->width / 2 - width / 2;
+	windowY = monitor->y + 200;
 	updateFonts();
 }
 
@@ -620,7 +636,6 @@ void onKeyPress (XEvent &event) {
 	queryi = lowercase(query);
 }
 
-
 int main () {
 	auto awaitApps = async(getApplications); // prepare list of apps in the background
 	readConfig();
@@ -629,13 +644,14 @@ int main () {
 	screen = DefaultScreen(display);
 	visual = DefaultVisual(display, screen);
 	colormap = DefaultColormap(display, screen);
+	root = DefaultRootWindow(display);
 	int depth = DefaultDepth(display, screen);
 	bool applicationsLoaded = false;
 
 	updateScale();
 	
-	window = XCreateWindow(display, XRootWindow(display, screen),
-		windowX, 200, width, inputHeight,
+	window = XCreateWindow(display, root,
+		windowX, windowY, width, inputHeight,
 		5, depth, InputOutput, visual, CWBackPixel, &attributes);
 	XSelectInput(display, window, ExposureMask | KeyPressMask | FocusChangeMask);
 	XIM xim = XOpenIM(display, 0, 0, 0);
@@ -679,7 +695,7 @@ int main () {
 				if (selected >= results.size()) {
 					selected = 0;
 				}
-				XMoveResizeWindow(display, window, windowX, 200, width, inputHeight + results.size() * rowHeight);
+				XMoveResizeWindow(display, window, windowX, windowY, width, inputHeight + results.size() * rowHeight);
 				renderTextInput(true);
 				renderResults();
 			}

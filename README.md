@@ -22,7 +22,7 @@ cd proto-launcher
 make install
 ```
 
-You may also need to install libxft and ubuntu fonts.
+You may also need to install `libxft`, `libxrandr`, and ubuntu fonts.
 
 To run the launcher:
 
