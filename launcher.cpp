@@ -1,25 +1,25 @@
-#include <iostream> // for log output
-#include <unistd.h> // starting applications
-#include <fstream> // for input file stream
-#include <string> // string type
-#include <vector> // flexible arrays
-#include <map> // hashmaps
-#include <algorithm> // for sorting
-#include <chrono> // sleep and duration
-#include <thread> // main loop management
-#include <X11/Xlib.h> // X11 api
-#include <X11/Xatom.h> // X11 Atoms (for preferences)
-#include <X11/Xutil.h> // used to handle keyboard events
-#include <X11/Xresource.h>
-#include <X11/Xft/Xft.h> // fonts (requires libxft)
-#include <filesystem> // used for scanning application dirs
-#include <pwd.h> // used to get user home dir
-#include <future>
+#include <algorithm>       // for sorting
+#include <chrono>          // sleep and duration
+#include <fstream>         // for input file stream
+#include <future>          // async promises, so UI can be build while building app list
+#include <glob.h>          // for scanning application dirs
+#include <iostream>        // for log output
+#include <map>             // hashmaps
+#include <pwd.h>           // used to get user home dir
+#include <sstream>         // for building keyword lists
+#include <string>          // string type
+#include <thread>          // main loop management
+#include <unistd.h>        // starting applications
+#include <vector>          // flexible arrays
+#include <X11/Xatom.h>     // X11 Atoms (for preferences)
+#include <X11/Xft/Xft.h>   // fonts (requires libxft)
+#include <X11/Xlib.h>      // X11 api
+#include <X11/Xresource.h> // for getting DPI
+#include <X11/Xutil.h>     // for handling keyboard events
 
-namespace fs = std::filesystem;
 using std::string, std::map, std::vector, std::ifstream, std::ofstream, std::stringstream, std::thread, std::promise;
 
-enum StyleAttribute {
+enum StyleAttr {
 	NAME,
 	C_TITLE, C_COMMENT, C_BG, C_HIGHLIGHT, C_MATCH, // colors
 	F_REGULAR, F_BOLD, F_SMALLREGULAR, F_SMALLBOLD, F_LARGE // fonts
@@ -31,7 +31,7 @@ struct Keyword {
 };
 
 struct Application {
-	string id, name, genericName, comment, cmd;
+	string path, type, name, genericName, comment, cmd;
 	vector<Keyword> keywords;
 };
 
@@ -40,24 +40,38 @@ struct Result {
 	int score;
 };
 
-const int BASE_DPI = 96;
-const int ROW_HEIGHT = 42;
-const int INPUT_HEIGHT = 1.25 * ROW_HEIGHT;
-const int TEXT_OFFSET = 0.63 * ROW_HEIGHT;
-const int BORDER_WIDTH = 3;
-const int INDENT = 14;
-const int COMMENT_SPACE = 8;
-const string HOME_DIR      = getenv("HOME")            != NULL ? getenv("HOME")            : getpwuid(getuid())->pw_dir;
-const string CONFIG_DIR    = getenv("XDG_CONFIG_HOME") != NULL ? getenv("XDG_CONFIG_HOME") : HOME_DIR + "/.config";
-const string DATA_DIR      = getenv("XDG_DATA_HOME")   != NULL ? getenv("XDG_DATA_HOME")   : HOME_DIR + "/.local/share";
-const string CONFIG        = CONFIG_DIR + "/launcher.conf";
-const string APP_DIRS[]    = { "/usr/share/applications", "/usr/local/share/applications", DATA_DIR + "/applications" };
-const StyleAttribute COLORS[] = { C_TITLE, C_COMMENT, C_BG, C_HIGHLIGHT, C_MATCH };
-const StyleAttribute FONTS[] = { F_REGULAR, F_BOLD, F_SMALLREGULAR, F_SMALLBOLD, F_LARGE };
+#ifdef TARGET_OS_MAC
+	#define OS_CONFIG_DIR "/Library/Preferences"
+	#define OS_DATA_DIR "/Library"
+	#define OS_APP_GLOBS \
+		"/Applications/**/*.app"
+#else
+	#define OS_CONFIG_DIR "/.config"
+	#define OS_DATA_DIR "/.local/share"
+	#define OS_APP_GLOBS \
+		"/usr/share/applications/*.desktop", \
+		"/usr/local/share/applications/*.desktop", \
+		DATA_DIR + "/applications/*.desktop"
+#endif
+
+const int BASE_DPI       = 96;
+const int ROW_HEIGHT     = 42;
+const int INPUT_HEIGHT   = 1.25 * ROW_HEIGHT;
+const int TEXT_OFFSET    = 0.63 * ROW_HEIGHT;
+const int BORDER_WIDTH   = 3;
+const int INDENT         = 14;
+const int COMMENT_SPACE  = 8;
+const string HOME_DIR    = getenv("HOME")            != NULL ? getenv("HOME")            : getpwuid(getuid())->pw_dir;
+const string CONFIG_DIR  = getenv("XDG_CONFIG_HOME") != NULL ? getenv("XDG_CONFIG_HOME") : HOME_DIR + OS_CONFIG_DIR;
+const string DATA_DIR    = getenv("XDG_DATA_HOME")   != NULL ? getenv("XDG_DATA_HOME")   : HOME_DIR + OS_DATA_DIR;
+const string CONFIG      = CONFIG_DIR + "/launcher.conf";
+const string APP_GLOBS[] = { OS_APP_GLOBS };
+const StyleAttr COLORS[] = { C_TITLE, C_COMMENT, C_BG, C_HIGHLIGHT, C_MATCH };
+const StyleAttr FONTS[]  = { F_REGULAR, F_BOLD, F_SMALLREGULAR, F_SMALLBOLD, F_LARGE };
 
 map<string, int> launches = {};
 
-map<StyleAttribute, const string> STYLE_ATTRIBUTES = {
+map<StyleAttr, const string> STYLE_ATTRIBUTES = {
 	{ C_TITLE, "title" },
 	{ C_COMMENT, "comment" },
 	{ C_BG, "background" },
@@ -70,7 +84,7 @@ map<StyleAttribute, const string> STYLE_ATTRIBUTES = {
 	{ F_LARGE, "large" }
 };
 
-map<StyleAttribute, string> STYLE_DEFAULTS = {
+map<StyleAttr, string> STYLE_DEFAULTS = {
 	{ C_TITLE, "#111111" },
 	{ C_COMMENT, "#999999" },
 	{ C_BG, "#ffffff" },
@@ -83,7 +97,7 @@ map<StyleAttribute, string> STYLE_DEFAULTS = {
 	{ F_LARGE, "Ubuntu,sans-20:light" }
 };
 
-vector<map<StyleAttribute, string>> THEMES = { // generated from http://daylerees.github.io/
+vector<map<StyleAttr, string>> THEMES = { // generated from http://daylerees.github.io/
 	{ { NAME, "Default "} }, // Default
 	{ { NAME, "Mellow Contrast" },     { C_TITLE, "#f8f8f2" }, { C_COMMENT, "#7a7267" }, { C_BG, "#0b0a09" }, { C_HIGHLIGHT, "#13110f" }, { C_MATCH, "#1f8181" } },
 	{ { NAME, "Legacy" },              { C_TITLE, "#aec2e0" }, { C_COMMENT, "#324357" }, { C_BG, "#14191f" }, { C_HIGHLIGHT, "#1b232c" }, { C_MATCH, "#ffffff" } },
@@ -173,7 +187,7 @@ vector<map<StyleAttribute, string>> THEMES = { // generated from http://dayleree
 	{ { NAME, "Turnip" },              { C_TITLE, "#ede0ce" }, { C_COMMENT, "#7a7267" }, { C_BG, "#1a1b1d" }, { C_HIGHLIGHT, "#222222" }, { C_MATCH, "#487d76" } } 
 };
 
-map<StyleAttribute, string> STYLE_OVERRIDE = {};
+map<StyleAttr, string> STYLE_OVERRIDE = {};
 
 Display *display;
 int screen;
@@ -194,8 +208,8 @@ int inputHeight, rowHeight, textOffset, borderWidth, indent, commentSpace;
 XSetWindowAttributes attributes;
 vector<Application> applications;
 vector<Result> results;
-map<StyleAttribute, XftFont*> fonts;
-map<StyleAttribute, XftColor> colors;
+map<StyleAttr, XftFont*> fonts;
+map<StyleAttr, XftColor> colors;
 
 string lowercase (const string &str) {
 	string out = str;
@@ -224,8 +238,8 @@ void search () {
 				// score determined by:
 				// - apps whose names begin with the query string appear first
 				// - apps whose names or descriptions contain the query string then appear
-				// - apps which hav e been opened most frequently should be prioritised
-				score = (100 - i) * keyword.weight * (matchIndex == 0 ? 10000 : 100) + launches[app.id];
+				// - apps which have been opened most frequently should be prioritised
+				score = (100 - i) * keyword.weight * (matchIndex == 0 ? 10000 : 100) + launches[app.path];
 				break;
 			}
 			i++;
@@ -257,7 +271,7 @@ void renderTextInput (const bool showCursor) {
 	renderText(width - clockWidth - indent, ty * 0.92, buffer, *fonts[F_SMALLREGULAR], colors[C_TITLE]);
 	if (showCursor) {
 		int cursorX = renderText(indent * 1.3, ty, query.substr(0, cursor), *fonts[F_LARGE], colors[C_BG]); // invisible text just to figure out cursor position
-		XSetForeground(display, gc, showCursor ? colors[C_TITLE].pixel : colors[C_BG].pixel); // cursor color
+		XSetForeground(display, gc, colors[C_TITLE].pixel); // cursor color
 		XFillRectangle(display, window, gc, cursorX, inputHeight / 4, 3, inputHeight / 2); // cursor
 	}
 	renderText(indent, ty, query, *fonts[F_LARGE], colors[C_TITLE]); // visible input text
@@ -374,54 +388,75 @@ void writeConfig () {
 	outfile.close();
 }
 
-vector<Application> getApplications () {
-	vector<Application> applications;
-	for (const string &dir : APP_DIRS) {
-		struct stat info;
-		if (stat(dir.c_str(), &info) != 0) { continue; }
-		for (const auto &entry : fs::directory_iterator(dir)) {
-			Application app = {};
-			app.id = entry.path();
-			ifstream infile(app.id);
-			string line, keywords;
-			while (getline(infile, line)) {
-				if (app.name == "" && line.find("Name=") == 0) {
-					app.name = line.substr(5);
-				}
-				if (app.genericName == "" && line.find("GenericName=") == 0) {
-					app.genericName = line.substr(12);
-				}
-				if (app.comment == "" && line.find("Comment=") == 0) {
-					app.comment = line.substr(8);
-				}
-				if (app.cmd == "" && line.find("Exec=") == 0 && line.substr(5) != "") {
-					app.cmd = line.substr(5);
-				}
-				if (app.cmd == "" && line.find("Keywords=") == 0) {
-					keywords = line.substr(9);
-				}
-			}
-			
-			stringstream ss = stringstream(lowercase(app.name));
-			string word;
-			while (getline(ss, word, ' ')) {
-				app.keywords.push_back({ word, 1000 });
-			}
+// OSX
+void parseAppFile (Application &app) {
+	app.name = app.path.substr(0, app.path.find_last_of(".")); // remove .app extension
+	app.cmd = "open " + app.path;
+	stringstream ss = stringstream(lowercase(app.name));
+	string word;
+	while (getline(ss, word, ' ')) {
+		app.keywords.push_back({ word, 1000 });
+	}
+}
 
-			ss = stringstream(lowercase(keywords));
-			while (getline(ss, word, ';')) {
-				app.keywords.push_back({ word, 1 });
-			}
-
-			ss = stringstream(lowercase(app.genericName + ' ' + app.comment));
-			while (getline(ss, word, ' ')) {
-				app.keywords.push_back({ word, 1 });
-			}
-
-			applications.push_back(app);
+// LINUX
+void parseDesktopFile (Application &app) {
+	ifstream infile(app.path);
+	string line, keywords;
+	while (getline(infile, line)) {
+		if (app.name == "" && line.find("Name=") == 0) {
+			app.name = line.substr(5);
+		}
+		if (app.genericName == "" && line.find("GenericName=") == 0) {
+			app.genericName = line.substr(12);
+		}
+		if (app.comment == "" && line.find("Comment=") == 0) {
+			app.comment = line.substr(8);
+		}
+		if (app.cmd == "" && line.find("Exec=") == 0 && line.substr(5) != "") {
+			app.cmd = line.substr(5);
+		}
+		if (app.cmd == "" && line.find("Keywords=") == 0) {
+			keywords = line.substr(9);
 		}
 	}
-	return applications;
+	
+	stringstream ss = stringstream(lowercase(app.name));
+	string word;
+	while (getline(ss, word, ' ')) {
+		app.keywords.push_back({ word, 1000 });
+	}
+
+	ss = stringstream(lowercase(keywords));
+	while (getline(ss, word, ';')) {
+		app.keywords.push_back({ word, 1 });
+	}
+
+	ss = stringstream(lowercase(app.genericName + ' ' + app.comment));
+	while (getline(ss, word, ' ')) {
+		app.keywords.push_back({ word, 1 });
+	}
+}
+
+vector<Application> getApplications () {
+	vector<Application> apps;
+	for (const string &pattern : APP_GLOBS) {
+		glob_t globResult;
+		glob(pattern.c_str(), GLOB_TILDE | GLOB_NOSORT, NULL, &globResult);
+		for (unsigned int i = 0; i < globResult.gl_pathc; i++) {
+			Application app = {};
+			app.path = string(globResult.gl_pathv[i]);
+			app.type = app.path.substr(app.path.find_last_of(".") + 1);
+			if (app.type == "app") {
+				parseAppFile(app);
+			} else if (app.type == "desktop") {
+				parseDesktopFile(app);
+			}
+			apps.push_back(app);
+		}
+		globfree(&globResult);
+	}
+	return apps;
 }
 
 void setProperty (const char *property, const char *value) {
@@ -447,7 +482,7 @@ void launch (Application &app) {
 		char **command = &args[0];
 		execvp(command[0], command);
 	} else {
-		launches[app.id]++;
+		launches[app.path]++;
 		writeConfig();
 	}
 	exit(0);
@@ -457,8 +492,8 @@ Visual *visual;
 Colormap colormap;
 int windowX;
 
-map<StyleAttribute, string> getStyle () {
-	map<StyleAttribute, string> style = STYLE_DEFAULTS;
+map<StyleAttr, string> getStyle () {
+	map<StyleAttr, string> style = STYLE_DEFAULTS;
 	for (const auto &[type, val] : THEMES[theme]) {
 		style[type] = val;
 	}
@@ -469,8 +504,8 @@ map<StyleAttribute, string> getStyle () {
 };
 
 void updateFonts () {
-	map<StyleAttribute, string> style = getStyle();
-	for (const StyleAttribute c : FONTS) {
+	map<StyleAttr, string> style = getStyle();
+	for (const StyleAttr c : FONTS) {
 		if (fonts.find(c) != fonts.end()) {
 			XftFontClose(display, fonts[c]);
 		}
@@ -489,18 +524,15 @@ void updateFonts () {
 }
 
 void updateStyle () {
-	map<StyleAttribute, string> style = getStyle();
-
-	for (const StyleAttribute c : COLORS) {
+	map<StyleAttr, string> style = getStyle();
+	for (const StyleAttr c : COLORS) {
 		unsigned short r = stol(style[c].substr(1, 2), nullptr, 16) * 256;
 		unsigned short g = stol(style[c].substr(3, 2), nullptr, 16) * 256;
 		unsigned short b = stol(style[c].substr(5, 2), nullptr, 16) * 256;
 		XRenderColor xrcolor = { .red = r, .green = g, .blue = b, .alpha = 255 * 256 };
 		XftColorAllocValue(display, visual, colormap, &xrcolor, &colors[c]);
 	}
-
 	updateFonts();
-
 	XSetWindowBackground(display, window, colors[C_BG].pixel);
 }
 
@@ -619,7 +651,6 @@ void onKeyPress (XEvent &event) {
 	}
 	queryi = lowercase(query);
 }
-
 
 int main () {
 	auto awaitApps = async(getApplications); // prepare list of apps in the background
