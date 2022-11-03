@@ -6,11 +6,11 @@ Minimalist and tiny (\~150KB) application launcher for Linux. Built in C++ with 
 
 ![image](https://user-images.githubusercontent.com/1085434/49340913-078ebb80-f63e-11e8-9f92-41e7bfea697a.png)
 
-
 Proto-launcher allows you to open applications which have desktop entries in the following directories:
-* `/usr/share/applications`
-* `/usr/local/share/applications`
-* `~/.local/share/applications`
+
+-   `/usr/share/applications`
+-   `/usr/local/share/applications`
+-   `~/.local/share/applications`
 
 This has only been tested on Arch Linux -- comments and suggestions welcome on the issue tracker.
 
@@ -22,7 +22,7 @@ cd proto-launcher
 make install
 ```
 
-You may also need to install libxft and ubuntu fonts.
+You may also need to install libxft and ubuntu fonts. For OSX you will need [XQuartz](https://www.xquartz.org/) and freetype ()
 
 To run the launcher:
 

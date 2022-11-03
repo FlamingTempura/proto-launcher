@@ -13,6 +13,7 @@
 #include <vector>          // flexible arrays
 #include <X11/Xatom.h>     // X11 Atoms (for preferences)
 #include <X11/Xft/Xft.h>   // fonts (requires libxft)
+#include <X11/Xlibint.h>      // X11 api
 #include <X11/Xlib.h>      // X11 api
 #include <X11/Xresource.h> // for getting DPI
 #include <X11/Xutil.h>     // for handling keyboard events
@@ -44,7 +45,7 @@ struct Result {
 	#define OS_CONFIG_DIR "/Library/Preferences"
 	#define OS_DATA_DIR "/Library"
 	#define OS_APP_GLOBS \
-		"/Applications/**/*.app"
+		"~/Applications/*.app"
 #else
 	#define OS_CONFIG_DIR "/.config"
 	#define OS_DATA_DIR "/.local/share"
@@ -61,15 +62,13 @@ const int TEXT_OFFSET    = 0.63 * ROW_HEIGHT;
 const int BORDER_WIDTH   = 3;
 const int INDENT         = 14;
 const int COMMENT_SPACE  = 8;
-const string HOME_DIR    = getenv("HOME")            != NULL ? getenv("HOME")            : getpwuid(getuid())->pw_dir;
+const string HOME_DIR    = getenv("HOME")            != NULL ? getenv("HOME")            : "~";//getpwuid(getuid())->pw_dir;
 const string CONFIG_DIR  = getenv("XDG_CONFIG_HOME") != NULL ? getenv("XDG_CONFIG_HOME") : HOME_DIR + OS_CONFIG_DIR;
 const string DATA_DIR    = getenv("XDG_DATA_HOME")   != NULL ? getenv("XDG_DATA_HOME")   : HOME_DIR + OS_DATA_DIR;
 const string CONFIG      = CONFIG_DIR + "/launcher.conf";
 const string APP_GLOBS[] = { OS_APP_GLOBS };
 const StyleAttr COLORS[] = { C_TITLE, C_COMMENT, C_BG, C_HIGHLIGHT, C_MATCH };
 const StyleAttr FONTS[]  = { F_REGULAR, F_BOLD, F_SMALLREGULAR, F_SMALLBOLD, F_LARGE };
-
-map<string, int> launches = {};
 
 map<StyleAttr, const string> STYLE_ATTRIBUTES = {
 	{ C_TITLE, "title" },
@@ -188,28 +187,48 @@ vector<map<StyleAttr, string>> THEMES = { // generated from http://daylerees.git
 };
 
 map<StyleAttr, string> STYLE_OVERRIDE = {};
+map<StyleAttr, XftColor> colors;
+map<StyleAttr, XftFont*> fonts;
 
-Display *display;
-int screen;
-Window window;
-GC gc;
-XIC xic;
-XftDraw *xftdraw;
-string query = "";
-string queryi = ""; // lower case
-int selected = 0;
-int cursor = 0;
-bool cursorVisible = false;
-int width;
-float baseWidth = 0.3f; // width as percentage of screen width
-int theme = 0;
-float scaleFactor = 1.0f;
-int inputHeight, rowHeight, textOffset, borderWidth, indent, commentSpace;
-XSetWindowAttributes attributes;
+map<string, int> launches = {};
+
 vector<Application> applications;
 vector<Result> results;
-map<StyleAttr, XftFont*> fonts;
-map<StyleAttr, XftColor> colors;
+
+bool cursorVisible = false;
+float baseWidth = 0.3f; // width as percentage of screen width
+float scaleFactor = 1.0f;
+int cursor = 0;
+int inputHeight, rowHeight, textOffset, borderWidth, indent, commentSpace;
+int screen;
+int selected = 0;
+int theme = 0;
+int width;
+int windowX;
+string query = "";
+string queryi = ""; // lower case
+
+Colormap colormap;
+Display *display;
+Visual *visual;
+Window window;
+XftDraw *xftdraw;
+XIC xic;
+XSetWindowAttributes attributes;
+GC gc;
+
+void fatal (const char *message) {
+	printf("FATAL: %s\n", message);
+	exit(1);
+}
+
+void log (const char *message) {
+	printf("%s\n", message);
+}
+
+void log (const int n) {
+	printf("%d\n", n);
+}
 
 string lowercase (const string &str) {
 	string out = str;
@@ -488,10 +507,6 @@ void launch (Application &app) {
 	exit(0);
 }
 
-Visual *visual;
-Colormap colormap;
-int windowX;
-
 map<StyleAttr, string> getStyle () {
 	map<StyleAttr, string> style = STYLE_DEFAULTS;
 	for (const auto &[type, val] : THEMES[theme]) {
@@ -538,36 +553,39 @@ void updateStyle () {
 
 void updateScale () {
 	int screenWidth = DisplayWidth(display, screen);
+	printf("Screen width: %d\n", screenWidth);
 	char *resourceString = XResourceManagerString(display);
+	if (resourceString == NULL) fatal("Failed to get RESOURCE_MANAGER property from server's route window");
 	XrmInitialize(); /* Need to initialize the DB before calling Xrm* functions */
-	XrmDatabase db = XrmGetStringDatabase(resourceString);
-	char *type = NULL;
-	XrmValue value;
-	double dpi = 96.0;
-	if (resourceString && 
-			XrmGetResource(db, "Xft.dpi", "String", &type, &value) == True &&
-			value.addr) {
-		dpi = atof(value.addr);
-	}
-	float dpiScaleFactor = dpi / BASE_DPI;
-	if (scaleFactor < 0.1) { scaleFactor = 0.1; }
-	float sf = dpiScaleFactor * scaleFactor;
-	inputHeight = sf * INPUT_HEIGHT;
-	rowHeight = sf * ROW_HEIGHT;
-	textOffset = sf * TEXT_OFFSET;
-	borderWidth = sf * BORDER_WIDTH;
-	indent = sf * INDENT;
-	commentSpace = sf * COMMENT_SPACE;
-	width = sf * screenWidth * baseWidth;
-	if (width < 200) {
-		if (screenWidth > 210) {
-			width = 200;
-		} else {
-			width = screenWidth - 10;
-		}
-	}
-	windowX = screenWidth / 2 - width / 2;
-	updateFonts();
+	printf("--> %s", resourceString);
+	//XrmDatabase db = XrmGetStringDatabase(resourceString);
+	// char *type = NULL;
+	// XrmValue value;
+	// double dpi = 96.0;
+	// if (resourceString && 
+	// 		XrmGetResource(db, "Xft.dpi", "String", &type, &value) == True &&
+	// 		value.addr) {
+	// 	dpi = atof(value.addr);
+	// }
+	// float dpiScaleFactor = dpi / BASE_DPI;
+	// if (scaleFactor < 0.1) { scaleFactor = 0.1; }
+	// float sf = dpiScaleFactor * scaleFactor;
+	// inputHeight = sf * INPUT_HEIGHT;
+	// rowHeight = sf * ROW_HEIGHT;
+	// textOffset = sf * TEXT_OFFSET;
+	// borderWidth = sf * BORDER_WIDTH;
+	// indent = sf * INDENT;
+	// commentSpace = sf * COMMENT_SPACE;
+	// width = sf * screenWidth * baseWidth;
+	// if (width < 200) {
+	// 	if (screenWidth > 210) {
+	// 		width = 200;
+	// 	} else {
+	// 		width = screenWidth - 10;
+	// 	}
+	// }
+	// windowX = screenWidth / 2 - width / 2;
+	// updateFonts();
 }
 
 void onKeyPress (XEvent &event) {
@@ -653,70 +671,91 @@ void onKeyPress (XEvent &event) {
 }
 
 int main () {
+	log("Proto-launcher starting...");
 	auto awaitApps = async(getApplications); // prepare list of apps in the background
 	readConfig();
 
 	display = XOpenDisplay(NULL);
+	if (display == NULL) fatal("Could not connect to X server");
+	printf("Display %s (%s)\n", display->display_name, display->vendor);
 	screen = DefaultScreen(display);
+	printf("Screen number: %d\n", screen);
 	visual = DefaultVisual(display, screen);
 	colormap = DefaultColormap(display, screen);
 	int depth = DefaultDepth(display, screen);
+	printf("Depth: %d\n", depth);
 	bool applicationsLoaded = false;
 
-	updateScale();
+	//updateScale();
 	
 	window = XCreateWindow(display, XRootWindow(display, screen),
 		windowX, 200, width, inputHeight,
 		5, depth, InputOutput, visual, CWBackPixel, &attributes);
+	if (window == BadAlloc) fatal("The server failed to allocate the requested resource or server memory.");
+	if (window == BadColor) fatal("A value for a Colormap argument does not name a defined Colormap.");
+	if (window == BadCursor) fatal("A value for a Cursor argument does not name a defined Cursor.");
+	if (window == BadMatch) fatal("The values do not exist for an InputOnly window.");
+	if (window == BadMatch) fatal("Some argument or pair of arguments has the correct type and range but fails to match in some other way required by the request.");
+	if (window == BadPixmap) fatal("A value for a Pixmap argument does not name a defined Pixmap.");
+	if (window == BadValue) fatal("Some numeric value falls outside the range of values accepted by the request. Unless a specific range is specified for an argument, the full range defined by the argument's type is accepted. Any argument defined as a set of alternatives can generate this error.");
+	if (window == BadWindow) fatal("A value for a Window argument does not name a defined Window.");
 	XSelectInput(display, window, ExposureMask | KeyPressMask | FocusChangeMask);
-	XIM xim = XOpenIM(display, 0, 0, 0);
-	xic = XCreateIC(xim, // input context
-		XNInputStyle,   XIMPreeditNothing | XIMStatusNothing,
-		XNClientWindow, window,
-		XNFocusWindow,  window,
-		NULL);
+
+	char	dbsrc[1000];
+	sprintf(dbsrc, "%s/.Xdefaults", HOME_DIR.c_str());
+    XrmDatabase rdb = XrmGetFileDatabase(dbsrc);
+
+	// XIM xim = XOpenIM(display, rdb, (char *)"xim", (char *)"XIM");
+	// if (xic == NULL) fatal("No input method could be opened");
+	// xic = XCreateIC(xim, // input context
+	// 	XNInputStyle,   XIMPreeditNothing | XIMStatusNothing,
+	// 	XNClientWindow, window,
+	// 	XNFocusWindow,  window,
+	// 	NULL);
+
+	// if (xic == NULL) fatal("Could not create input context");
 
 	XGCValues gr_values;
 	gc = XCreateGC(display, window, 0, &gr_values);
 
 	updateStyle();
 
-	setProperty("_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_DOCK");
-	setProperty("_NET_WM_STATE", "_NET_WM_STATE_ABOVE");
-	setProperty("_NET_WM_STATE", "_NET_WM_STATE_MODAL");
+	// setProperty("_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_DOCK");
+	// setProperty("_NET_WM_STATE", "_NET_WM_STATE_ABOVE");
+	// setProperty("_NET_WM_STATE", "_NET_WM_STATE_MODAL");
 
-	XMapWindow(display, window);
+	// XMapWindow(display, window);
 
-	xftdraw = XftDrawCreate(display, window, visual, colormap);
+	// xftdraw = XftDrawCreate(display, window, visual, colormap);
 
-	XEvent event;
-	while (1) {
-		while (XCheckMaskEvent(display, ExposureMask | KeyPressMask | FocusChangeMask, &event)) {
-			if (event.type == Expose) {
-				renderTextInput(true);
-				renderResults();
-			}
-			if (event.type == KeyPress) {
-				onKeyPress(event);
-				if (query.length() > 0) {
-					if (!applicationsLoaded) {
-						applications = awaitApps.get();
-						applicationsLoaded = true;
-					}
-					search();
-				} else {
-					results = {};
-				}
-				if (selected >= results.size()) {
-					selected = 0;
-				}
-				XMoveResizeWindow(display, window, windowX, 200, width, inputHeight + results.size() * rowHeight);
-				renderTextInput(true);
-				renderResults();
-			}
-			if (event.type == FocusOut) { exit(0); }
-		}
-		cursorBlink();
-		std::this_thread::sleep_for(std::chrono::milliseconds(10));
-	}
+	// XEvent event;
+	// while (1) {
+	// 	while (XCheckMaskEvent(display, ExposureMask | KeyPressMask | FocusChangeMask, &event)) {
+	// 		if (event.type == Expose) {
+	// 			renderTextInput(true);
+	// 			renderResults();
+	// 		}
+	// 		if (event.type == KeyPress) {
+	// 			onKeyPress(event);
+	// 			if (query.length() > 0) {
+	// 				if (!applicationsLoaded) {
+	// 					applications = awaitApps.get();
+	// 					applicationsLoaded = true;
+	// 				}
+	// 				search();
+	// 			} else {
+	// 				results = {};
+	// 			}
+	// 			if (selected >= results.size()) {
+	// 				selected = 0;
+	// 			}
+	// 			XMoveResizeWindow(display, window, windowX, 200, width, inputHeight + results.size() * rowHeight);
+	// 			renderTextInput(true);
+	// 			renderResults();
+	// 		}
+	// 		if (event.type == FocusOut) { exit(0); }
+	// 	}
+	// 	cursorBlink();
+	// 	std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	// }
 }
